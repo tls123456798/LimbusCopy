@@ -1,3 +1,4 @@
+using NUnit.Framework;
 using UnityEngine;
 
 [CreateAssetMenu(menuName = "Data/Player")]
@@ -8,4 +9,8 @@ public class PlayerData : ScriptableObject
     [field: SerializeField] public float MaxHealth { get; private set; } // 최대 체력
     [field: SerializeField] public int Speed { get; private set; } // 속도 (턴 순서 결정)
     [field: SerializeField] public Sprite Image {  get; private set; } // 캐릭터의 이미지
+    [field: SerializeField] public SkillData SkillData1 { get; private set; }
+    [field: SerializeField] public SkillData SkillData2 { get; private set; }
+    [field: SerializeField] public SkillData SkillData3 { get; private set; }
+
 }

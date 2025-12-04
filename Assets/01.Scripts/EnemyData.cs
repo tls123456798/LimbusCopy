@@ -8,4 +8,5 @@ public class EnemyData : ScriptableObject
     [field: SerializeField] public float MaxHealth { get; private set; } // 최대 체력
     [field: SerializeField] public int Speed { get; private set; } // 속도 (턴 순서 결정)
     [field: SerializeField] public Sprite Image { get; private set; } // 캐릭터의 이미지)
+    [field: SerializeField] public SkillData SkillData { get; private set; }
 }

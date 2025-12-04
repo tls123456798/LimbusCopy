@@ -16,7 +16,18 @@ public class SkillView : MonoBehaviour
         Skill = skill;
         title.text = skill.Name;
         description.text = skill.Description;
-        coin.sprite = skill.Image;
+        coin.sprite = coin.sprite;
         imageSR.sprite = skill.Image;
+    }
+    private void OnMouseEnter()
+    {
+        wrapper.SetActive(false);
+        Vector3 pos = new(transform.position.x, -2, 0);
+        SkillViewHoverSystem.Instance.Show(Skill, pos);
+    }
+    private void OnMouseExit()
+    {
+        SkillViewHoverSystem.Instance.Hide();
+        wrapper.SetActive(true);
     }
 }

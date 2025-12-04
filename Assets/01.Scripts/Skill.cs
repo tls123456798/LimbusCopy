@@ -4,7 +4,7 @@ using UnityEngine;
 public class Skill
 {
     public string Name => data.name;
-    public string Description => Description;
+    public string Description => data.Description;
     public Sprite Image => data.Image;
     private readonly SkillData data;
 
