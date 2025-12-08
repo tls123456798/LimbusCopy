@@ -1,8 +1,11 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
-public class EnemeySystem : MonoBehaviour
+public class EnemeySystem : Singleton<EnemeySystem>
 {
+    internal static object Instance;
+
     private void OnEnable()
     {
         ActionSystem.AttachPerformer<EnemyTurnGA>(EnemyTurnPerformer);
@@ -11,7 +14,7 @@ public class EnemeySystem : MonoBehaviour
     {
         ActionSystem.DetachPerformer<EnemyTurnGA>();
     }
-    private IEnumerator EnemyTurnPerformer(EnemyTurnGA enemyTurnGA)
+  private IEnumerator EnemyTurnPerformer(EnemyTurnGA enemyTurnGA)
     {
         Debug.Log("Enemy Turn");
         yield return new();

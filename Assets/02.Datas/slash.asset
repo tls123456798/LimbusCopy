@@ -15,7 +15,11 @@ MonoBehaviour:
   <SkillName>k__BackingField: Slash
   <Description>k__BackingField: 4 damage
   <Image>k__BackingField: {fileID: 21300000, guid: 53bbdbc3e4c1e18418269a58b56415ef, type: 3}
+  <Effects>k__BackingField: []
   <coinflipCount>k__BackingField: 2
   successChance: 0.5
   bonusPerSuccess: 0.5
   baseDamage: 4
+  references:
+    version: 2
+    RefIds: []

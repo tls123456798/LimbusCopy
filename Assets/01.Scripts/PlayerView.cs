@@ -1,3 +1,4 @@
+using System;
 using TMPro;
 using UnityEngine;
 
@@ -15,6 +16,12 @@ public class PlayerView : MonoBehaviour
         spriteRenderer.sprite = image;
         UPdateHealthText();
     }
+
+    internal void Setup(PlayerData playerData)
+    {
+        throw new NotImplementedException();
+    }
+
     private void UPdateHealthText()
     {
         healthText.text = "HP:" + CurrentHealth;
