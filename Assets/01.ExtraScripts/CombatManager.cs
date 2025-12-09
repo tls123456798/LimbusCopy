@@ -1,161 +1,240 @@
-// CombatManager.cs
 using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
-
+using Unity.VisualScripting;
 public class CombatManager : MonoBehaviour
 {
-    // 현재 전투의 상태
-    private CombatState currentState = CombatState.Setup;
+    // 3. 핵심 변수 (싱글톤 및 데이터)
 
-    // 현재 행동할 캐릭터 (Queue에서 꺼내온 캐릭터)
-    private CharacterStats currentActor;
+    // 싱글톤 인스턴스
+    public static CombatManager Instance { get; private set; }
 
-    // 모든 아군 및 적 캐릭터 목록
+    [Header("전투 데이터")]
     public List<CharacterStats> party = new List<CharacterStats>();
     public List<CharacterStats> enemies = new List<CharacterStats>();
 
-    // 턴 순서를 관리하는 대기열
+    // 데이터와 View를 연결하는 맵
+    private Dictionary<string, CharacterView> characterViewMap = new Dictionary<string, CharacterView>();
+
+    [Header("현재 상태 및 흐름")]
+    private CombatState currentState = CombatState.Setup;
     private Queue<CharacterStats> turnOrderQueue = new Queue<CharacterStats>();
 
-    // UI 조작을 위한 플래그 (임시)
+    // 턴 정보
+    private CharacterStats currentActor;
+    private CharacterStats selectedTarget; // 유저 입력 시 할당됨
+    private string selectedSkillId; // 유저 입력 시 할당됨
+
+    // UI 플래그
     private bool isInputReceived = false;
 
-    // ----- 초기 설정 -----
-    void Start()
+    // 4. 유니티 라이프사이클 및 싱글톤 초기화
+    private void Awake()
     {
-        // 예시로 캐릭터 생성 (실제로는 로드 필요)
-        party.Add(new CharacterStats("Man", 100, 15, 10));
-        enemies.Add(new CharacterStats("Monster", 80, 20, 8));
+        if (Instance != null && Instance != this)
+        {
+            Destroy(this.gameObject);
+        }
+        else
+        {
+            Instance = this;
+        }
+    }
+    private void Start()
+    {
+        // 임시 캐릭터 생성
+        party.Add(new CharacterStats("Man", 100, 15, 10, 10)); // ID, HP, ATK, SPD, DEF
+        enemies.Add(new CharacterStats("Monster", 80, 20, 8, 8)); // ID, HP, ATK, SPD, DEF
 
-        // 초기 상태 시작
         SetState(CombatState.Setup);
     }
+    // 5. State Machine 핵심 메서드
 
-    // ----- 핵심: 상태 변경 메서드 -----
-    // 상태를 변경할 때마다 필요한 초기화 작업을 수행합니다.
     public void SetState(CombatState newState)
     {
-        // 상태 전/후 디버깅
         Debug.Log($"전투 상태 변경: {currentState} -> {newState}");
         currentState = newState;
 
-        // 각 상태에 따른 초기 액션 수행
         switch (currentState)
         {
-            case CombatState.CalculatingCombat:
-                int totalDamage = 15;
-                SetState(CombatState.PlayingAnimation); // 초기화 후 바로 턴 시작
+            case CombatState.Setup:
+                PrepareTurnOrder();
+                SetState(CombatState.StartTurn);
                 break;
 
             case CombatState.StartTurn:
-                PrepareTurnOrder(); // 턴 순서 정렬
-                currentActor = turnOrderQueue.Dequeue(); // 첫 번째 행동할 캐릭터 가져오기
+                if (turnOrderQueue.Count == 0)
+                {
+                    PrepareTurnOrder();
+                }
 
-                // UIController에게 "누가 턴 시작했음" 알림 (화면 업데이트)
+                // 다음 행동할 캐릭터 할당 및 사망자 스킵 처리
+                currentActor = turnOrderQueue.Dequeue();
+                while (currentActor.CurrentHP <= 0 && turnOrderQueue.Count > 0)
+                {
+                    currentActor = turnOrderQueue.Dequeue();
+                }
+                if (currentActor.CurrentHP <= 0 && turnOrderQueue.Count == 0)
+                {
+                    CheckCombatEndAndAdvanceTurn();
+                    return;
+                }
                 // UIController.Instance.DisplayTurnInfo(currentActor);
 
-                // 아군 턴이면 입력 대기 상태로, 적 턴이면 계산/애니메이션 상태로 이동
                 if (party.Contains(currentActor))
                 {
+                    isInputReceived = false;
                     SetState(CombatState.WaitingForInput);
                 }
                 else
                 {
-                    SetState(CombatState.CalculatingCombat); // 적의 AI는 바로 계산으로 넘어감
-                }
-                break;
-
-            case CombatState.WaitingForInput:
-                // UIController에게 "스킬 선택 창을 띄워라" 명령
-                // UIController.Instance.ShowSkillSelection(currentActor.Skills);
-                isInputReceived = false; // 입력 대기 시작
-                break;
-
-            // ... 나머지 상태들 ...
-
-            case CombatState.CombatEnd:
-                Debug.Log("전투 종료!");
-                // ... 결과 화면 표시 ...
-                break;
-        }
-    }
-
-    // ----- 턴 순서 정렬 (Speed 기준) -----
-    private void PrepareTurnOrder()
-    {
-        // 모든 캐릭터를 합치고 Speed 기준으로 내림차순 정렬
-        List<CharacterStats> allUnits = new List<CharacterStats>(party.Concat(enemies));
-        allUnits = allUnits.OrderByDescending(unit => unit.Speed).ToList();
-
-        // Queue에 넣기
-        turnOrderQueue.Clear();
-        foreach (var unit in allUnits)
-        {
-            if (unit.CurrentHP > 0)
-            {
-                turnOrderQueue.Enqueue(unit);
-            }
-        }
-    }
-
-    // ----- 핵심: 유니티 Update 루프를 통한 상태 유지/전환 -----
-    void Update()
-    {
-        // 매 프레임마다 현재 상태를 확인하고 필요한 작업을 수행합니다.
-        switch (currentState)
-        {
-            case CombatState.WaitingForInput:
-                // 유저 입력이 들어왔는지 계속 체크
-                if (isInputReceived)
-                {
-                    // 입력이 들어왔으면, 다음 단계인 계산 상태로 전환
+                    // 적 AI 턴: 임시 타겟 설정 후 바로 계산
+                    selectedTarget = party.FirstOrDefault(p => p.CurrentHP > 0);
+                    selectedSkillId = "EnemyAttack";
                     SetState(CombatState.CalculatingCombat);
                 }
                 break;
+            case CombatState.WaitingForInput:
+                // UIController.Instance.ShowSkillSelection(currentActor.Skills);
+                break;
+            case CombatState.CalculatingCombat:
+                if(selectedTarget == null || selectedTarget.CurrentHP <= 0)
+                {
+                    Debug.LogWarning("타겟이 유효하지 않아 다음 턴으로 넘깁니다.");
+                        SetState(CombatState.PlayingAnimation);
+                    break;
+                }
+                int totalDamage = CalculateLimbusDamage(currentActor, selectedTarget);
+
+                // 3. 계산된 데미지를 타겟 캐릭터 데이터에 반영
+                selectedTarget.TakeDamage(totalDamage);
+                // 시각적 요소에게 결과를 알미 및 업데이트
+                CharacterView targetView = FindView(selectedTarget);
+                if(targetView != null)
+                {
+                    targetView.UpdateHealthBar();
+                }
+
+                // 5. 애니메이션 상태로 전환
+                SetState(CombatState.PlayingAnimation);
+                break;
 
             case CombatState.PlayingAnimation:
-                // 캐릭터 애니메이션 재생이 끝났는지 체크
-                // if (CharacterView.IsAnimationFinished())
-                // {
-                //     // 애니메이션이 끝나면, 다음 턴을 시작하거나 전투 종료를 체크
-                //     CheckCombatEnd();
-                // }
+                // CharacterView에게 애니메이션 재생을 명령하고 콜백을 기다림
+                CharacterView actorview = FindView(currentActor);
+                if(actorview != null)
+                {
+                    actorview.PlayAttackAnimation("Attack");
+                }
+                else
+                {
+                    // View 가 없으면 애니메이션 없이 바로 다음 턴으로 전환
+                    OnAnimationFinished();
+                }
+                break;
+
+            case CombatState.CombatEnd:
+                Debug.Log("전투 종료!");
+                // UIController.Instance.ShowResultScreen();
                 break;
         }
     }
+    // 외부 콜백 및 턴 흐름 제어
 
-    // ----- 외부에서 호출되는 메서드 (UI 이벤트) -----
-    // 유저가 스킬 선택 버튼을 눌렀을 때 UIController가 이 메서드를 호출합니다.
-    public void OnSkillSelected(string selectedSkill, CharacterStats target)
+    // 유저 입력 (UIController에서 호출됨)
+    public void OnSkillSelected(string skilldId,CharacterStats target)
     {
-        if (currentState == CombatState.WaitingForInput)
+        if(currentState == CombatState.WaitingForInput)
         {
-            // 선택된 스킬/타겟 정보를 저장
-            // this.selectedSkill = selectedSkill;
-            // this.target = target;
-
-            isInputReceived = true; // 입력 완료 플래그를 True로 설정하여 Update에서 상태 전환 유도
+            this.selectedTarget = target;
+            this.selectedSkillId = skilldId;
+            SetState(CombatState.CalculatingCombat);
         }
     }
-
-    // ----- 턴 종료 체크 및 다음 턴 준비 -----
-    private void CheckCombatEnd()
+    public void OnAnimationFinished()
     {
-        // 승리/패배 조건 체크 (예: 적 HP가 모두 0인지)
-        if (enemies.All(e => e.CurrentHP <= 0))
+        if(currentState == CombatState.PlayingAnimation)
+        {
+            EndTurnCleanup(); // 턴 정리 작업 수행
+            CheckCombatEndAndAdvanceTurn();
+        }
+    }
+    // 턴 순서 정렬 (Speed 기준)
+    private void PrepareTurnOrder()
+    {
+        List<CharacterStats> allUnits = party.Concat(enemies).Where(c => c.CurrentHP > 0).ToList();
+        allUnits = allUnits.OrderByDescending(Unit => Unit.Speed).ToList();
+
+        turnOrderQueue.Clear();
+        foreach(var unit in allUnits)
+        {
+            turnOrderQueue.Enqueue(unit);
+        }
+    }
+    // 승리/패배 체크 및 다음 턴 진행
+    private void CheckCombatEndAndAdvanceTurn()
+    {
+        if(enemies.TrueForAll(e => e.CurrentHP <= 0))
         {
             SetState(CombatState.CombatEnd);
+            return;
         }
-        else if (turnOrderQueue.Count > 0)
+        if(party.TrueForAll(p => p.CurrentHP <= 0))
         {
-            // 턴이 남아있으면 다음 캐릭터에게 넘김
-            SetState(CombatState.StartTurn);
+            SetState(CombatState.CombatEnd);
+            return;
         }
-        else
+        if (turnOrderQueue.Count == 0 && party.Any(p => p.CurrentHP >0) && enemies.Any(e => e.CurrentHP > 0))
         {
-            // Queue가 비었으면, 다음 라운드를 위해 턴 순서를 다시 정렬하고 StartTurn으로 이동
-            SetState(CombatState.StartTurn);
+            PrepareTurnOrder();
+        }
+        SetState(CombatState.StartTurn);
+    }
+    // 데이터/뷰 연결 및 정리 로직
+
+    // 뷰 등록 (Scene 초기화 시 호출 필요)
+    public void RegisterView(CharacterView view)
+    {
+        if (!characterViewMap.ContainsKey(view.stats.Id))
+        {
+            characterViewMap.Add(view.stats.Id, view);
         }
     }
+    private CharacterView FindView(CharacterStats stats)
+    {
+        if(characterViewMap.TryGetValue(stats.Id, out CharacterView view))
+        {
+            return view;
+        }
+        return null;
+    }
+    // 턴 종료 정리 (쿨타임, 상태 이상 감소)
+    private void EndTurnCleanup()
+    {
+        List<CharacterStats> allCharacters = party.Concat(enemies).Where(c => c.CurrentHP>0).ToList();
+    }
+    private int CalculateLimbusPower(int basePower, int coinCount, int coinBonus)
+    {
+        int finalPower = basePower;
+        for(int i = 0; i< coinCount; i++)
+        {
+            if (Random.Range(0,2) == 1) // 50% 성공률 가정
+            {
+                finalPower += coinBonus;
+            }
+        }
+        return finalPower;
+    }
+    private int CalculateLimbusDamage(CharacterStats attacker, CharacterStats defender)
+    {
+        // 임시 값 사용
+        int attackPower = CalculateLimbusPower(5, 2, 3);
+
+        int baseDamage = attackPower - defender.Defender;
+
+        // TODO: 상태 이상 영향 적용 로직 추가
+
+        return Mathf.Max(1); // 최소 1 데미지 보장
+    }
 }
+
