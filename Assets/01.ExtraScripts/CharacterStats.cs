@@ -5,6 +5,9 @@ using System.Collections.Generic;
 
 public class CharacterStats
 {
+    public List<Skill> AvailableSkills = new List<Skill>(); // 사용할 수 있는 스킬 목록
+    public List<StatusEffect> ActiveEffects = new List<StatusEffect>(); // 현재 적용된 상태 이상
+   
     // 캐릭터의 고유 ID (어떤 캐릭터인지 식별)
     public string Id;
 

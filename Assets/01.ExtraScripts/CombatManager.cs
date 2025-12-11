@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.VisualScripting;
+using Unity.VisualScripting.Antlr3.Runtime.Misc;
 public class CombatManager : MonoBehaviour
 {
     // 3. 핵심 변수 (싱글톤 및 데이터)
@@ -23,10 +24,12 @@ public class CombatManager : MonoBehaviour
     // 턴 정보
     private CharacterStats currentActor;
     private CharacterStats selectedTarget; // 유저 입력 시 할당됨
-    private string selectedSkillId; // 유저 입력 시 할당됨
+    private Skill selectedSkill;
+    // private string selectedSkillId; // 유저 입력 시 할당됨
 
     // UI 플래그
     private bool isInputReceived = false;
+    private int damageAfterResistance;
 
     // 4. 유니티 라이프사이클 및 싱글톤 초기화
     private void Awake()
@@ -63,11 +66,27 @@ public class CombatManager : MonoBehaviour
                 break;
 
             case CombatState.StartTurn:
+                //UIController.Instance.ShowSkillSelection(new List<string>());
+                SetState(CombatState.WaitingForInput);
                 if (turnOrderQueue.Count == 0)
                 {
                     PrepareTurnOrder();
                 }
+                if (party.Contains(currentActor))
+                {
+                    // UIController.Instance.ShowSkillSelection(currentActor.Skills); // UI 활성화
+                    isInputReceived = false;
 
+                    // 다음 상태를 WaitingForInput으로 설정
+                    SetState(CombatState.WaitingForInput);
+                    // 여기에 break;를 추가하거나, switch 문을 빠져나가도록 해야 함
+                    return; // SetState를 호출했으므로 함수를 종료
+
+                    //UIController.Instance.DisPlayturnInfo(currentActor);
+
+                    //isInputReceived = false;
+                    //SetState(CombatState.WaitingForInput);   
+                }
                 // 다음 행동할 캐릭터 할당 및 사망자 스킵 처리
                 currentActor = turnOrderQueue.Dequeue();
                 while (currentActor.CurrentHP <= 0 && turnOrderQueue.Count > 0)
@@ -79,8 +98,6 @@ public class CombatManager : MonoBehaviour
                     CheckCombatEndAndAdvanceTurn();
                     return;
                 }
-                // UIController.Instance.DisplayTurnInfo(currentActor);
-
                 if (party.Contains(currentActor))
                 {
                     isInputReceived = false;
@@ -90,7 +107,7 @@ public class CombatManager : MonoBehaviour
                 {
                     // 적 AI 턴: 임시 타겟 설정 후 바로 계산
                     selectedTarget = party.FirstOrDefault(p => p.CurrentHP > 0);
-                    selectedSkillId = "EnemyAttack";
+                    selectedSkill = "EnemyAttack";
                     SetState(CombatState.CalculatingCombat);
                 }
                 break;
@@ -98,10 +115,10 @@ public class CombatManager : MonoBehaviour
                 // UIController.Instance.ShowSkillSelection(currentActor.Skills);
                 break;
             case CombatState.CalculatingCombat:
-                if(selectedTarget == null || selectedTarget.CurrentHP <= 0)
+                if (selectedTarget == null || selectedTarget.CurrentHP <= 0)
                 {
                     Debug.LogWarning("타겟이 유효하지 않아 다음 턴으로 넘깁니다.");
-                        SetState(CombatState.PlayingAnimation);
+                    SetState(CombatState.PlayingAnimation);
                     break;
                 }
                 int totalDamage = CalculateLimbusDamage(currentActor, selectedTarget);
@@ -110,7 +127,7 @@ public class CombatManager : MonoBehaviour
                 selectedTarget.TakeDamage(totalDamage);
                 // 시각적 요소에게 결과를 알미 및 업데이트
                 CharacterView targetView = FindView(selectedTarget);
-                if(targetView != null)
+                if (targetView != null)
                 {
                     targetView.UpdateHealthBar();
                 }
@@ -122,7 +139,7 @@ public class CombatManager : MonoBehaviour
             case CombatState.PlayingAnimation:
                 // CharacterView에게 애니메이션 재생을 명령하고 콜백을 기다림
                 CharacterView actorview = FindView(currentActor);
-                if(actorview != null)
+                if (actorview != null)
                 {
                     actorview.PlayAttackAnimation("Attack");
                 }
@@ -142,18 +159,22 @@ public class CombatManager : MonoBehaviour
     // 외부 콜백 및 턴 흐름 제어
 
     // 유저 입력 (UIController에서 호출됨)
-    public void OnSkillSelected(string skilldId,CharacterStats target)
+    public void OnSkillSelected(Skill skill, CharacterStats target)
     {
-        if(currentState == CombatState.WaitingForInput)
+        if (currentState == CombatState.WaitingForInput)
         {
             this.selectedTarget = target;
-            this.selectedSkillId = skilldId;
+            this.selectedSkill = skill;
             SetState(CombatState.CalculatingCombat);
+        }
+        else
+        {
+            Debug.LogWarning($"OnSkillSelected 호출 시 상태 오류: 현재 상태 {currentState}");
         }
     }
     public void OnAnimationFinished()
     {
-        if(currentState == CombatState.PlayingAnimation)
+        if (currentState == CombatState.PlayingAnimation)
         {
             EndTurnCleanup(); // 턴 정리 작업 수행
             CheckCombatEndAndAdvanceTurn();
@@ -166,7 +187,7 @@ public class CombatManager : MonoBehaviour
         allUnits = allUnits.OrderByDescending(Unit => Unit.Speed).ToList();
 
         turnOrderQueue.Clear();
-        foreach(var unit in allUnits)
+        foreach (var unit in allUnits)
         {
             turnOrderQueue.Enqueue(unit);
         }
@@ -174,17 +195,17 @@ public class CombatManager : MonoBehaviour
     // 승리/패배 체크 및 다음 턴 진행
     private void CheckCombatEndAndAdvanceTurn()
     {
-        if(enemies.TrueForAll(e => e.CurrentHP <= 0))
+        if (enemies.TrueForAll(e => e.CurrentHP <= 0))
         {
             SetState(CombatState.CombatEnd);
             return;
         }
-        if(party.TrueForAll(p => p.CurrentHP <= 0))
+        if (party.TrueForAll(p => p.CurrentHP <= 0))
         {
             SetState(CombatState.CombatEnd);
             return;
         }
-        if (turnOrderQueue.Count == 0 && party.Any(p => p.CurrentHP >0) && enemies.Any(e => e.CurrentHP > 0))
+        if (turnOrderQueue.Count == 0 && party.Any(p => p.CurrentHP > 0) && enemies.Any(e => e.CurrentHP > 0))
         {
             PrepareTurnOrder();
         }
@@ -202,7 +223,7 @@ public class CombatManager : MonoBehaviour
     }
     private CharacterView FindView(CharacterStats stats)
     {
-        if(characterViewMap.TryGetValue(stats.Id, out CharacterView view))
+        if (characterViewMap.TryGetValue(stats.Id, out CharacterView view))
         {
             return view;
         }
@@ -211,14 +232,14 @@ public class CombatManager : MonoBehaviour
     // 턴 종료 정리 (쿨타임, 상태 이상 감소)
     private void EndTurnCleanup()
     {
-        List<CharacterStats> allCharacters = party.Concat(enemies).Where(c => c.CurrentHP>0).ToList();
+        List<CharacterStats> allCharacters = party.Concat(enemies).Where(c => c.CurrentHP > 0).ToList();
     }
     private int CalculateLimbusPower(int basePower, int coinCount, int coinBonus)
     {
         int finalPower = basePower;
-        for(int i = 0; i< coinCount; i++)
+        for (int i = 0; i < coinCount; i++)
         {
-            if (Random.Range(0,2) == 1) // 50% 성공률 가정
+            if (Random.Range(0, 2) == 1) // 50% 성공률 가정
             {
                 finalPower += coinBonus;
             }
@@ -227,14 +248,50 @@ public class CombatManager : MonoBehaviour
     }
     private int CalculateLimbusDamage(CharacterStats attacker, CharacterStats defender)
     {
-        // 임시 값 사용
-        int attackPower = CalculateLimbusPower(5, 2, 3);
+        // 고정 값 대신 selectedskill의 데이터를 사용
+        if (selectedSkill == null)
+        {
+            Debug.LogError("선택된 스킬 데이터가 업습니다. 기본 공격을 가정합니다.");
+            // 임시 기본 공격 값 사용 (없을 경우를 대비)
+            return CalculateLimbusDamageFallback(5, 2, 3, defender);
+        }
+        // 공격력 계산
+        int attackPower = CalculateLimbusPower(
+            selectedSkill.BasePower,
+            selectedSkill.CoinCount,
+            selectedSkill.CoinBonus
+            );
 
+        // 기본 데미지 계산
         int baseDamage = attackPower - defender.Defender;
+        int damgeAfterResistance = baseDamage;
 
-        // TODO: 상태 이상 영향 적용 로직 추가
+        // 스킬 효과 (상태 이상) 적용 로직 추가
+        ApplySkillEffects(selectedSkill, defender);
 
-        return Mathf.Max(1); // 최소 1 데미지 보장
+        return Mathf.Max(1, damageAfterResistance);
+    }
+    private int CalculateLimbusDamageFallback(int baseP, int coinC, int coinB, CharacterStats defender)
+    {
+        int power = CalculateLimbusPower(baseP, coinC, coinB);
+        return Mathf.Max(1, power - defender.Defender);
+    }
+
+    internal void OnSkillSelected(string v, CharacterStats selectedTarget)
+    {
+        throw new System.NotImplementedException();
+    }
+    private void ApplySkillEffects(Skill skill, CharacterStats target)
+    {
+        if (skill.EffectsToApply != null)
+        {
+            foreach (var effect in skill.EffectsToApply)
+            {
+                // 기존 효과가 있는지 확인하고 Duration을 갱신하거나, 새 효과를 추가
+                // 간단화를 위해 여기서는 무조건 새로 추가한다고 가정
+                // 실제 게임에서는 중복 효과 처릭 복잡하므로, Unique ID 등으로 관리해야 합니다.
+
+            }
+        }
     }
 }
-
