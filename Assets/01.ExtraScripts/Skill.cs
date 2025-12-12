@@ -30,9 +30,4 @@ public class Skill
         CoinBonus = coinBonus;  
         Cooldown = cd;
     }
-
-    public static implicit operator Skill(string v)
-    {
-        throw new NotImplementedException();
-    }
 }

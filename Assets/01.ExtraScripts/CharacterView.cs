@@ -1,93 +1,99 @@
+ï»¿using System;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class CharacterView : MonoBehaviour
 {
-    [Header("µ¥ÀÌÅÍ ÂüÁ¶")]
-    // ÀÎ½ºÆåÅÍ¿¡¼­ ¼öµ¿À¸·Î CharacterStats ½ºÅ©¸³ÅÍºí ¿ÀºêÁ§Æ®³ª ÀÎ½ºÅÏ½º¸¦ ÇÒ´çÇØ¾ß ÇÔ
-    // ¸¸¾à CharacterStats°¡ Monobehaviour¶ó¸é, ÀÌ Ä³¸¯ÅÍ ¿ÀºêÁ§Æ®ÀÇ ÀÚ½Ä¿¡ ºÙ¾î ÀÖÀ»¼ö ÀÖÀ½
+    [Header("ë°ì´í„° ì°¸ì¡°")]
+    // ì¸ìŠ¤í™í„°ì—ì„œ ìˆ˜ë™ìœ¼ë¡œ CharacterStats ìŠ¤í¬ë¦½í„°ë¸” ì˜¤ë¸Œì íŠ¸ë‚˜ ì¸ìŠ¤í„´ìŠ¤ë¥¼ í• ë‹¹í•´ì•¼ í•¨
+    // ë§Œì•½ CharacterStatsê°€ Monobehaviourë¼ë©´, ì´ ìºë¦­í„° ì˜¤ë¸Œì íŠ¸ì˜ ìì‹ì— ë¶™ì–´ ìˆì„ìˆ˜ ìˆìŒ
     public CharacterStats stats;
 
-    [Header("½Ã°¢Àû ¿ä¼Ò")]
+    [Header("ì‹œê°ì  ìš”ì†Œ")]
     public Animator animator;
-    public Slider healthBarSlider; // HP¸¦ Ç¥½ÃÇÒ UI Slider
+    public Slider healthBarSlider; // HPë¥¼ í‘œì‹œí•  UI Slider
 
     public void Start()
     {
-        // µ¥ÀÌÅÍ È®ÀÎ
+        // ë°ì´í„° í™•ì¸
         if (stats == null)
         {
-            Debug.LogError($"CharacterView '{gameObject.name}'¿¡ CharacterStats µ¥ÀÌÅÍ °¡ ÇÒ´çµÇÁö ¾Ê¾Ò½À´Ï´Ù!");
+            Debug.LogError($"CharacterView '{gameObject.name}'ì— CharacterStats ë°ì´í„° ê°€ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤!");
             return;
         }
-        // CombatManager¿¡ ÀÚ½Å(View) µî·Ï
+        // CombatManagerì— ìì‹ (View) ë“±ë¡
         if (CombatManager.Instance != null)
         {
-            CombatManager.Instance.RegisterView(this);
+            //CombatManager.Instance.RegisterView(this);
         }
         else
         {
-            Debug.LogError("CombatManager ÀÎ½ºÅÏ½º¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù. ¾À¿¡ CombatManager°¡ ÀÖ´ÂÁö È®ÀÎÇÏ¼¼¿ä.");
+            Debug.LogError("CombatManager ì¸ìŠ¤í„´ìŠ¤ë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤. ì”¬ì— CombatManagerê°€ ìˆëŠ”ì§€ í™•ì¸í•˜ì„¸ìš”.");
         }
-        // ÃÊ±â HP ¹Ù ¾÷µ¥ÀÌÆ®
+        // ì´ˆê¸° HP ë°” ì—…ë°ì´íŠ¸
         UpdateHealthBar();
     }
     /// <summary>
-    /// HP »óÅÂ°¡ º¯°æµÇ¾úÀ» ¶§ Health Bar UI¸¦ ¾÷µ¥ÀÌÆ®ÇÕ.
+    /// HP ìƒíƒœê°€ ë³€ê²½ë˜ì—ˆì„ ë•Œ Health Bar UIë¥¼ ì—…ë°ì´íŠ¸í•©.
     /// </summary>
     public void UpdateHealthBar()
     {
-        if(healthBarSlider != null)
+        if (healthBarSlider != null)
         {
-            // ÃÖ´ë HP¿Í ÇöÀç HP¸¦ ÀÌ¿ëÇÏ¿© ½½¶óÀÌ´õ °ªÀ» ¼³Á¤
+            // ìµœëŒ€ HPì™€ í˜„ì¬ HPë¥¼ ì´ìš©í•˜ì—¬ ìŠ¬ë¼ì´ë” ê°’ì„ ì„¤ì •
             healthBarSlider.maxValue = stats.MaxHP;
             healthBarSlider.value = stats.CurrentHP;
         }
-        // Ä³¸¯ÅÍ°¡ »ç¸ÁÇß´ÂÁö Ã¼Å©
-        if(stats.CurrentHP <= 0)
+        // ìºë¦­í„°ê°€ ì‚¬ë§í–ˆëŠ”ì§€ ì²´í¬
+        if (stats.CurrentHP <= 0)
         {
             PlayDeathAnimation();
         }
     }
     /// <summary>
-    /// °ø°İ ¾Ö´Ï¸ŞÀÌ¼ÇÀ» Àç»ıÇÏ°í, ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ ³¡³­ ÈÄ CombatManager¿¡°Ô ¾Ë·ÁÁİ´Ï´Ù.
+    /// ê³µê²© ì• ë‹ˆë©”ì´ì…˜ì„ ì¬ìƒí•˜ê³ , ì• ë‹ˆë©”ì´ì…˜ì´ ëë‚œ í›„ CombatManagerì—ê²Œ ì•Œë ¤ì¤ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="triggerName"> Àç»ıÇÒ ¾Ö´Ï¸ŞÀÌ¼Ç Æ®¸®°Å ÀÌ¸§</param>
+    /// <param name="triggerName"> ì¬ìƒí•  ì• ë‹ˆë©”ì´ì…˜ íŠ¸ë¦¬ê±° ì´ë¦„</param>
     public void PlayAttackAnimation(string triggerName)
     {
-        if(animator != null)
+        if (animator != null)
         {
             animator.SetTrigger(triggerName);
         }
-        // ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ı ½Ã°£¸¸Å­ Áö¿¬ ÈÄ Äİ¹éÀ» È£ÃâÇØ¾ß ÇÕ´Ï´Ù.
-        // ¿©±â¼­´Â ÀÓ½Ã·Î 1ÃÊ ÈÄ Äİ¹éÀ» È£ÃâÇÏµµ·Ï ÄÚ·çÆ¾À» »ç¿ë
+        // ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒ ì‹œê°„ë§Œí¼ ì§€ì—° í›„ ì½œë°±ì„ í˜¸ì¶œí•´ì•¼ í•©ë‹ˆë‹¤.
+        // ì—¬ê¸°ì„œëŠ” ì„ì‹œë¡œ 1ì´ˆ í›„ ì½œë°±ì„ í˜¸ì¶œí•˜ë„ë¡ ì½”ë£¨í‹´ì„ ì‚¬ìš©
         StartCoroutine(WaitForAnimation(1.0f));
     }
     /// <summary>
-    /// »ç¸Á ¾Ö´Ï¸ŞÀÌ¼ÇÀ» Àç»ıÇÏ°í ¿ÀºêÁ§Æ®¸¦ ºñÈ°¼ºÈ­ÇÕ´Ï´Ù.
+    /// ì‚¬ë§ ì• ë‹ˆë©”ì´ì…˜ì„ ì¬ìƒí•˜ê³  ì˜¤ë¸Œì íŠ¸ë¥¼ ë¹„í™œì„±í™”í•©ë‹ˆë‹¤.
     /// </summary>
     public void PlayDeathAnimation()
     {
-        if(animator != null)
+        if (animator != null)
         {
-            animator.SetTrigger("Die"); // "Die" Æ®¸®°Å °¡Á¤
+            animator.SetTrigger("Die"); // "Die" íŠ¸ë¦¬ê±° ê°€ì •
         }
-        // TODO: »ç¸Á ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ ³¡³­ ÈÄ ¿ÀºêÁ§Æ® ºñÈ°¼ºÈ­ ·ÎÁ÷ Ãß°¡ (ÄÚ·çÆ¾ »ç¿ë ±ÇÀå)
+        // TODO: ì‚¬ë§ ì• ë‹ˆë©”ì´ì…˜ì´ ëë‚œ í›„ ì˜¤ë¸Œì íŠ¸ ë¹„í™œì„±í™” ë¡œì§ ì¶”ê°€ (ì½”ë£¨í‹´ ì‚¬ìš© ê¶Œì¥)
         this.gameObject.SetActive(false);
     }
 
     /// <summary>
-    /// ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ıÀ» ±â´Ù·È´Ù°¡ CombatManager¿¡°Ô ÅÏ Á¾·á¸¦ ¾Ë¸®´À ÄÚ·çÆ¾
+    /// ì• ë‹ˆë©”ì´ì…˜ ì¬ìƒì„ ê¸°ë‹¤ë ¸ë‹¤ê°€ CombatManagerì—ê²Œ í„´ ì¢…ë£Œë¥¼ ì•Œë¦¬ëŠ ì½”ë£¨í‹´
     /// </summary>
     private System.Collections.IEnumerator WaitForAnimation(float duration)
     {
         yield return new WaitForSeconds(duration);
 
-        // ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ ³¡³ª¸é CombatManater¿¡°Ô ´ÙÀ½ ÅÏÀ¸·Î ³Ñ±â¶ó°í ¾Ë¸³´Ï´Ù.
-        if(CombatManager.Instance != null)
+        // ì• ë‹ˆë©”ì´ì…˜ì´ ëë‚˜ë©´ CombatManaterì—ê²Œ ë‹¤ìŒ í„´ìœ¼ë¡œ ë„˜ê¸°ë¼ê³  ì•Œë¦½ë‹ˆë‹¤.
+        if (CombatManager.Instance != null)
         {
             CombatManager.Instance.OnAnimationFinished();
         }
+    }
+
+    internal void PlayAttackAnimation()
+    {
+        throw new NotImplementedException();
     }
 }

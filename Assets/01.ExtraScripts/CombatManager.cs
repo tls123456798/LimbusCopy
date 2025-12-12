@@ -1,297 +1,372 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections.Generic;
 using System.Linq;
+using System;
+using UnityEditor.Rendering.LookDev;
 using Unity.VisualScripting;
-using Unity.VisualScripting.Antlr3.Runtime.Misc;
+
+// ğŸš¨ ì£¼ì˜: CombatState, CharacterStats, Skill, StatusEffect, CharacterView íƒ€ì…ì´ ì •ì˜ë˜ì–´ ìˆì–´ì•¼ í•©ë‹ˆë‹¤.
+
+// ===================================================
+// CombatState Enumì€ CombatState.cs íŒŒì¼ì— ì •ì˜ë˜ì–´ ìˆìŠµë‹ˆë‹¤.
+// public enum CombatState { Setup, StartTurn, WaitingForInput, CalculatingCombat, PlayingAnimation, CombatEnd }
+// ===================================================
+
 public class CombatManager : MonoBehaviour
 {
-    // 3. ÇÙ½É º¯¼ö (½Ì±ÛÅæ ¹× µ¥ÀÌÅÍ)
-
-    // ½Ì±ÛÅæ ÀÎ½ºÅÏ½º
+    // ===================================================
+    // 1. ì‹±ê¸€í†¤ íŒ¨í„´ ë° ì™¸ë¶€ ì°¸ì¡°
+    // ===================================================
     public static CombatManager Instance { get; private set; }
 
-    [Header("ÀüÅõ µ¥ÀÌÅÍ")]
+    // UIControllerëŠ” ìŠ¤í‚¬ ì„ íƒ UIë¥¼ ì œì–´í•©ë‹ˆë‹¤.
+    private UIController uiController;
+
+    // ===================================================
+    // 2. ìºë¦­í„° ëª©ë¡ ë° í„´ ê´€ë¦¬
+    // ===================================================
+    [Header("ìºë¦­í„° ëª©ë¡")]
     public List<CharacterStats> party = new List<CharacterStats>();
     public List<CharacterStats> enemies = new List<CharacterStats>();
 
-    // µ¥ÀÌÅÍ¿Í View¸¦ ¿¬°áÇÏ´Â ¸Ê
-    private Dictionary<string, CharacterView> characterViewMap = new Dictionary<string, CharacterView>();
-
-    [Header("ÇöÀç »óÅÂ ¹× Èå¸§")]
+    [Header("í„´ ê´€ë¦¬")]
     private CombatState currentState = CombatState.Setup;
     private Queue<CharacterStats> turnOrderQueue = new Queue<CharacterStats>();
+    public CharacterStats currentActor;
 
-    // ÅÏ Á¤º¸
-    private CharacterStats currentActor;
-    private CharacterStats selectedTarget; // À¯Àú ÀÔ·Â ½Ã ÇÒ´çµÊ
-    private Skill selectedSkill;
-    // private string selectedSkillId; // À¯Àú ÀÔ·Â ½Ã ÇÒ´çµÊ
+    // ===================================================
+    // 3. ì…ë ¥ ë° ì„ íƒëœ ì •ë³´
+    // ===================================================
+    private Skill selectedSkill;             // ì„ íƒëœ Skill ê°ì²´ (UIControllerì—ì„œ ì „ë‹¬)
+    private CharacterStats selectedTarget;   // ì„ íƒëœ íƒ€ê²Ÿ
 
-    // UI ÇÃ·¡±×
-    private bool isInputReceived = false;
-    private int damageAfterResistance;
 
-    // 4. À¯´ÏÆ¼ ¶óÀÌÇÁ»çÀÌÅ¬ ¹× ½Ì±ÛÅæ ÃÊ±âÈ­
+    // ===================================================
+    // 4. ì´ˆê¸°í™” ë° Unity LifeCycle
+    // ===================================================
     private void Awake()
     {
         if (Instance != null && Instance != this)
         {
-            Destroy(this.gameObject);
+            Destroy(gameObject);
         }
         else
         {
             Instance = this;
         }
     }
-    private void Start()
-    {
-        // ÀÓ½Ã Ä³¸¯ÅÍ »ı¼º
-        party.Add(new CharacterStats("Man", 100, 15, 10, 10)); // ID, HP, ATK, SPD, DEF
-        enemies.Add(new CharacterStats("Monster", 80, 20, 8, 8)); // ID, HP, ATK, SPD, DEF
 
+    void Start()
+    {
+        // UIController ì¸ìŠ¤í„´ìŠ¤ ì°¸ì¡° (í•„ìˆ˜)
+        uiController = UIController.Instance;
+        if (uiController == null)
+        {
+            Debug.LogError("UIController ì¸ìŠ¤í„´ìŠ¤ë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
+            return;
+        }
+
+        // ğŸš¨ ì„ì‹œ ìºë¦­í„° ìƒì„± ë° ìŠ¤íƒ¯ ì„¤ì • (ID, MaxHP, ATK, SPD, DEF ìˆœì„œ)
+        CharacterStats player = new CharacterStats("Player", 100, 15, 10, 10);
+        CharacterStats enemy = new CharacterStats("Enemy", 80, 20, 8, 8);
+
+        party.Add(player);
+        enemies.Add(enemy);
+
+        // ğŸš¨ [í•µì‹¬ ìˆ˜ì •] Setup ìƒíƒœë¡œ ì§„ì…í•˜ì—¬ í„´ ìˆœì„œë¥¼ ì¤€ë¹„
         SetState(CombatState.Setup);
     }
-    // 5. State Machine ÇÙ½É ¸Ş¼­µå
+
+    // ===================================================
+    // 5. ìƒíƒœ ì „í™˜ í•µì‹¬ ë¡œì§
+    // ===================================================
 
     public void SetState(CombatState newState)
     {
-        Debug.Log($"ÀüÅõ »óÅÂ º¯°æ: {currentState} -> {newState}");
+        Debug.Log($"ì „íˆ¬ ìƒíƒœ ë³€ê²½: {currentState} -> {newState}");
         currentState = newState;
 
         switch (currentState)
         {
             case CombatState.Setup:
-                PrepareTurnOrder();
+                PrepareTurnOrder(); // í„´ ìˆœì„œ ì¤€ë¹„
                 SetState(CombatState.StartTurn);
                 break;
 
             case CombatState.StartTurn:
-                //UIController.Instance.ShowSkillSelection(new List<string>());
-                SetState(CombatState.WaitingForInput);
+                if (CheckCombatEndAndAdvanceTurn())
+                {
+                    return; // ì „íˆ¬ê°€ ì¢…ë£Œë˜ì—ˆìœ¼ë©´ ì¢…ë£Œ
+                }
+
+                // ğŸš¨ [ìˆ˜ì •] Queue empty ì˜¤ë¥˜ ë°©ì§€: íê°€ ë¹„ì—ˆì„ ë•Œ PrepareTurnOrder()ê°€ ë‹¤ì‹œ í˜¸ì¶œë˜ëŠ”ì§€ í™•ì¸
                 if (turnOrderQueue.Count == 0)
                 {
                     PrepareTurnOrder();
+                    if(turnOrderQueue.Count == 0)
+                    {
+                        // ëª¨ë“  ìºë¦­í„°ê°€ ì‚¬ë§í•œ ê²½ìš° (ì´ì „ CheckCombatEndandAdvanceTurn ì—ì„œ ì¡í˜€ì•¼ í•¨)
+                        SetState(CombatState.CombatEnd);
+                        return;
+                    }
                 }
+
+                currentActor = turnOrderQueue.Dequeue();
+
+                // í”Œë ˆì´ì–´ í„´
                 if (party.Contains(currentActor))
                 {
-                    // UIController.Instance.ShowSkillSelection(currentActor.Skills); // UI È°¼ºÈ­
-                    isInputReceived = false;
-
-                    // ´ÙÀ½ »óÅÂ¸¦ WaitingForInputÀ¸·Î ¼³Á¤
+                    // UIControllerì—ê²Œ ìŠ¤í‚¬ ì„ íƒ UI í™œì„±í™” ìš”ì²­
+                    uiController.ShowSkillSelection(currentActor);
                     SetState(CombatState.WaitingForInput);
-                    // ¿©±â¿¡ break;¸¦ Ãß°¡ÇÏ°Å³ª, switch ¹®À» ºüÁ®³ª°¡µµ·Ï ÇØ¾ß ÇÔ
-                    return; // SetState¸¦ È£ÃâÇßÀ¸¹Ç·Î ÇÔ¼ö¸¦ Á¾·á
-
-                    //UIController.Instance.DisPlayturnInfo(currentActor);
-
-                    //isInputReceived = false;
-                    //SetState(CombatState.WaitingForInput);   
-                }
-                // ´ÙÀ½ Çàµ¿ÇÒ Ä³¸¯ÅÍ ÇÒ´ç ¹× »ç¸ÁÀÚ ½ºÅµ Ã³¸®
-                currentActor = turnOrderQueue.Dequeue();
-                while (currentActor.CurrentHP <= 0 && turnOrderQueue.Count > 0)
-                {
-                    currentActor = turnOrderQueue.Dequeue();
-                }
-                if (currentActor.CurrentHP <= 0 && turnOrderQueue.Count == 0)
-                {
-                    CheckCombatEndAndAdvanceTurn();
                     return;
                 }
-                if (party.Contains(currentActor))
-                {
-                    isInputReceived = false;
-                    SetState(CombatState.WaitingForInput);
-                }
+                // ì  AI í„´ (ì„ì‹œ ë¡œì§)
                 else
                 {
-                    // Àû AI ÅÏ: ÀÓ½Ã Å¸°Ù ¼³Á¤ ÈÄ ¹Ù·Î °è»ê
+                    // AI ë¡œì§: ê°€ì¥ HPê°€ ë†’ì€ íŒŒí‹°ì›ì„ íƒ€ê²Ÿìœ¼ë¡œ ì„¤ì •
                     selectedTarget = party.FirstOrDefault(p => p.CurrentHP > 0);
-                    selectedSkill = "EnemyAttack";
+                    selectedSkill = currentActor.AvailableSkills.FirstOrDefault(s => s.Id == "BasicAttack");
+
+                    if (selectedSkill == null || selectedTarget == null)
+                    {
+                        Debug.LogWarning("ì  AI í„´: íƒ€ê²Ÿ ë˜ëŠ” ìŠ¤í‚¬ì´ ì—†ì–´ í„´ì„ ë„˜ê¹ë‹ˆë‹¤.");
+                        OnAnimationFinished(); // í„´ ì¢…ë£Œ ë° ë‹¤ìŒ í„´ìœ¼ë¡œ
+                        return;
+                    }
+
                     SetState(CombatState.CalculatingCombat);
                 }
                 break;
+
             case CombatState.WaitingForInput:
-                // UIController.Instance.ShowSkillSelection(currentActor.Skills);
+                // UIControllerì˜ OnSkillSelected í˜¸ì¶œì„ ê¸°ë‹¤ë¦½ë‹ˆë‹¤.
                 break;
+
             case CombatState.CalculatingCombat:
                 if (selectedTarget == null || selectedTarget.CurrentHP <= 0)
                 {
-                    Debug.LogWarning("Å¸°ÙÀÌ À¯È¿ÇÏÁö ¾Ê¾Æ ´ÙÀ½ ÅÏÀ¸·Î ³Ñ±é´Ï´Ù.");
-                    SetState(CombatState.PlayingAnimation);
+                    Debug.LogWarning("íƒ€ê²Ÿì´ ìœ íš¨í•˜ì§€ ì•Šì•„ ë‹¤ìŒ í„´ìœ¼ë¡œ ë„˜ê¹ë‹ˆë‹¤.");
+                    OnAnimationFinished(); // ë°”ë¡œ ë‹¤ìŒ í„´ ì‹œì‘
                     break;
                 }
-                int totalDamage = CalculateLimbusDamage(currentActor, selectedTarget);
 
-                // 3. °è»êµÈ µ¥¹ÌÁö¸¦ Å¸°Ù Ä³¸¯ÅÍ µ¥ÀÌÅÍ¿¡ ¹İ¿µ
+                // ğŸš¨ [ìˆ˜ì •] CalculateLimbusDamage ì¸ì 3ê°œ ì „ë‹¬
+                int totalDamage = CalculateLimbusDamage(currentActor, selectedTarget, selectedSkill);
+
+                // 2. ê³„ì‚°ëœ ë°ë¯¸ì§€ë¥¼ íƒ€ê²Ÿ ìºë¦­í„° ë°ì´í„°ì— ë°˜ì˜
                 selectedTarget.TakeDamage(totalDamage);
-                // ½Ã°¢Àû ¿ä¼Ò¿¡°Ô °á°ú¸¦ ¾Ë¹Ì ¹× ¾÷µ¥ÀÌÆ®
                 CharacterView targetView = FindView(selectedTarget);
-                if (targetView != null)
+                if(targetView != null)
                 {
                     targetView.UpdateHealthBar();
                 }
-
-                // 5. ¾Ö´Ï¸ŞÀÌ¼Ç »óÅÂ·Î ÀüÈ¯
+                // ì• ë‹ˆë©”ì´ì…˜ ìƒíƒœë¡œ ì „í™˜
                 SetState(CombatState.PlayingAnimation);
                 break;
 
             case CombatState.PlayingAnimation:
-                // CharacterView¿¡°Ô ¾Ö´Ï¸ŞÀÌ¼Ç Àç»ıÀ» ¸í·ÉÇÏ°í Äİ¹éÀ» ±â´Ù¸²
-                CharacterView actorview = FindView(currentActor);
-                if (actorview != null)
+                CharacterView attackerView = FindView(currentActor);
+                if (attackerView != null)
                 {
-                    actorview.PlayAttackAnimation("Attack");
+                    attackerView.PlayAttackAnimation();
                 }
                 else
                 {
-                    // View °¡ ¾øÀ¸¸é ¾Ö´Ï¸ŞÀÌ¼Ç ¾øÀÌ ¹Ù·Î ´ÙÀ½ ÅÏÀ¸·Î ÀüÈ¯
                     OnAnimationFinished();
                 }
                 break;
 
             case CombatState.CombatEnd:
-                Debug.Log("ÀüÅõ Á¾·á!");
-                // UIController.Instance.ShowResultScreen();
+                Debug.Log("ì „íˆ¬ ì¢…ë£Œ!");
+                // TODO: ìŠ¹ë¦¬/íŒ¨ë°° í™”ë©´ í‘œì‹œ
                 break;
         }
     }
-    // ¿ÜºÎ Äİ¹é ¹× ÅÏ Èå¸§ Á¦¾î
 
-    // À¯Àú ÀÔ·Â (UIController¿¡¼­ È£ÃâµÊ)
+    /// <summary>
+    /// UIControllerì—ì„œ ìŠ¤í‚¬ ì„ íƒ ë° íƒ€ê²ŸíŒ…ì´ ì™„ë£Œë˜ë©´ í˜¸ì¶œë©ë‹ˆë‹¤.
+    /// </summary>
     public void OnSkillSelected(Skill skill, CharacterStats target)
     {
-        if (currentState == CombatState.WaitingForInput)
-        {
-            this.selectedTarget = target;
-            this.selectedSkill = skill;
-            SetState(CombatState.CalculatingCombat);
-        }
-        else
-        {
-            Debug.LogWarning($"OnSkillSelected È£Ãâ ½Ã »óÅÂ ¿À·ù: ÇöÀç »óÅÂ {currentState}");
-        }
+        if (currentState != CombatState.WaitingForInput) return;
+
+        selectedSkill = skill;
+        selectedTarget = target;
+
+        SetState(CombatState.CalculatingCombat);
     }
-    public void OnAnimationFinished()
-    {
-        if (currentState == CombatState.PlayingAnimation)
-        {
-            EndTurnCleanup(); // ÅÏ Á¤¸® ÀÛ¾÷ ¼öÇà
-            CheckCombatEndAndAdvanceTurn();
-        }
-    }
-    // ÅÏ ¼ø¼­ Á¤·Ä (Speed ±âÁØ)
+
+    // ===================================================
+    // 6. í„´ ë¡œì§ ì²˜ë¦¬ ë©”ì„œë“œ
+    // ===================================================
+
     private void PrepareTurnOrder()
     {
-        List<CharacterStats> allUnits = party.Concat(enemies).Where(c => c.CurrentHP > 0).ToList();
-        allUnits = allUnits.OrderByDescending(Unit => Unit.Speed).ToList();
+        // ì‚¬ë§í•œ ìºë¦­í„°ë¥¼ ì œì™¸í•˜ê³  Speedë¥¼ ê¸°ë°˜ìœ¼ë¡œ ìˆœì„œë¥¼ ê²°ì •
+        var allCharacters = party.Concat(enemies)
+            .Where(c => c.CurrentHP > 0)
+            .OrderByDescending(c => c.Speed)
+            .ToList();
 
-        turnOrderQueue.Clear();
-        foreach (var unit in allUnits)
-        {
-            turnOrderQueue.Enqueue(unit);
-        }
+        turnOrderQueue = new Queue<CharacterStats>(allCharacters);
+        Debug.Log($"í„´ ìˆœì„œ ê²°ì •ë¨. ì´ {allCharacters.Count}ëª…");
     }
-    // ½Â¸®/ÆĞ¹è Ã¼Å© ¹× ´ÙÀ½ ÅÏ ÁøÇà
-    private void CheckCombatEndAndAdvanceTurn()
+
+    /// <summary>
+    /// CharacterViewì˜ ì• ë‹ˆë©”ì´ì…˜ì´ ëë‚¬ì„ ë•Œ í˜¸ì¶œë˜ì–´ ë‹¤ìŒ í„´ìœ¼ë¡œ ë„˜ì–´ê°‘ë‹ˆë‹¤.
+    /// </summary>
+    public void OnAnimationFinished()
     {
-        if (enemies.TrueForAll(e => e.CurrentHP <= 0))
-        {
-            SetState(CombatState.CombatEnd);
-            return;
-        }
-        if (party.TrueForAll(p => p.CurrentHP <= 0))
-        {
-            SetState(CombatState.CombatEnd);
-            return;
-        }
-        if (turnOrderQueue.Count == 0 && party.Any(p => p.CurrentHP > 0) && enemies.Any(e => e.CurrentHP > 0))
-        {
-            PrepareTurnOrder();
-        }
+        // í„´ ì¢…ë£Œ ì‹œ ì¿¨íƒ€ì„ ë° ìƒíƒœ ì´ìƒ ì •ë¦¬
+        EndTurnCleanup();
         SetState(CombatState.StartTurn);
     }
-    // µ¥ÀÌÅÍ/ºä ¿¬°á ¹× Á¤¸® ·ÎÁ÷
 
-    // ºä µî·Ï (Scene ÃÊ±âÈ­ ½Ã È£Ãâ ÇÊ¿ä)
-    public void RegisterView(CharacterView view)
-    {
-        if (!characterViewMap.ContainsKey(view.stats.Id))
-        {
-            characterViewMap.Add(view.stats.Id, view);
-        }
-    }
-    private CharacterView FindView(CharacterStats stats)
-    {
-        if (characterViewMap.TryGetValue(stats.Id, out CharacterView view))
-        {
-            return view;
-        }
-        return null;
-    }
-    // ÅÏ Á¾·á Á¤¸® (ÄğÅ¸ÀÓ, »óÅÂ ÀÌ»ó °¨¼Ò)
     private void EndTurnCleanup()
     {
         List<CharacterStats> allCharacters = party.Concat(enemies).Where(c => c.CurrentHP > 0).ToList();
+
+        foreach (var stats in allCharacters)
+        {
+            // 1. ìŠ¤í‚¬ ì¿¨íƒ€ì„ ê°ì†Œ
+            var skillsToUpdate = stats.SkillCooldowns.Keys.ToList();
+            foreach (var skillName in skillsToUpdate)
+            {
+                if (stats.SkillCooldowns.ContainsKey(skillName) && stats.SkillCooldowns[skillName] > 0)
+                {
+                    stats.SkillCooldowns[skillName]--;
+                }
+            }
+
+            // 2. ìƒíƒœ ì´ìƒ ì§€ì† ì‹œê°„ ê°ì†Œ ë° DoT íš¨ê³¼ ì ìš©
+            stats.ActiveEffects.RemoveAll(effect =>
+            {
+                // DoT (DamageOverTime) íš¨ê³¼ ì ìš©
+                if (effect.TargetStat == StatType.DamageOverTime)
+                {
+                    stats.TakeDamage((int)effect.Value);
+                    CharacterView view = FindView(stats);
+                    if (view != null) view.UpdateHealthBar();
+                }
+
+                effect.Duration--;
+
+                if (effect.Duration <= 0)
+                {
+                    // ğŸš¨ [ì™„ì„±] ë²„í”„/ë””ë²„í”„ê°€ ëë‚  ë•Œ ìŠ¤íƒ¯ì„ ê¸°ë³¸ ìŠ¤íƒ¯ìœ¼ë¡œ ë³µì›
+                    if (effect.TargetStat == StatType.Attack)
+                    {
+                        stats.Attack = stats.BaseAttack;
+                    }
+                    else if (effect.TargetStat == StatType.Defense)
+                    {
+                        stats.Defense = stats.BaseDefense;
+                    }
+                    // TODO: ë‹¤ë¥¸ ìŠ¤íƒ¯(Speed ë“±)ì— ëŒ€í•œ ë³µì› ë¡œì§ë„ í•„ìš”í•˜ë‹¤ë©´ ì—¬ê¸°ì— ì¶”ê°€
+
+                    // ì§€ì† ì‹œê°„ì´ ëë‚¬ìœ¼ë¯€ë¡œ ì œê±°
+                    return true;
+                }
+                return false; // ìœ ì§€
+            });
+        }
     }
-    private int CalculateLimbusPower(int basePower, int coinCount, int coinBonus)
+
+    private bool CheckCombatEndAndAdvanceTurn()
     {
-        int finalPower = basePower;
+        // íŒŒí‹° ë˜ëŠ” ì  ì „ë©¸ ì—¬ë¶€ í™•ì¸
+        if (party.All(p => p.CurrentHP <= 0) || enemies.All(e => e.CurrentHP <= 0))
+        {
+            SetState(CombatState.CombatEnd);
+            return true;
+        }
+        return false;
+    }
+
+    // ===================================================
+    // 7. ë°ë¯¸ì§€ ê³„ì‚° ë° ìƒíƒœ ì´ìƒ ì ìš©
+    // ===================================================
+
+    /// <summary>
+    /// ìµœì¢… ë°ë¯¸ì§€ë¥¼ ê³„ì‚°í•©ë‹ˆë‹¤. (ì†ì„± ì‹œìŠ¤í…œ ì œê±°)
+    /// </summary>
+    private int CalculateLimbusDamage(CharacterStats attacker, CharacterStats defender, Skill skill)
+    {
+        if (skill == null)
+        {
+            Debug.LogError("ìŠ¤í‚¬ ë°ì´í„°ê°€ ëˆ„ë½ë˜ì—ˆìŠµë‹ˆë‹¤.");
+            return 1;
+        }
+
+        // 1. ê³µê²©ë ¥ (Power) ê³„ì‚° 
+        int attackPower = CalculateLimbusPower(
+            attacker.Attack,
+            skill.BasePower,
+            skill.CoinCount,
+            skill.CoinBonus
+        );
+
+        // 2. ê¸°ë³¸ ë°ë¯¸ì§€ ê³„ì‚° (ê³µê²©ë ¥ - ë°©ì–´ë ¥)
+        int baseDamage = attackPower - defender.Defense;
+
+        // ğŸš¨ [ì œê±°] ì†ì„± ìƒì„± ê³„ìˆ˜ ë¡œì§ ì œê±°
+
+        int finalDamage = baseDamage;
+
+        // 3. ìŠ¤í‚¬ ë¶€ê°€ íš¨ê³¼ ì ìš© (ìƒíƒœ ì´ìƒ ë¶€ì—¬)
+        ApplySkillEffects(skill, defender);
+
+        // ìµœì†Œ ë°ë¯¸ì§€ëŠ” 1
+        return Mathf.Max(1, finalDamage);
+    }
+
+    /// <summary>
+    /// ê³µê²©ìì˜ ATK, ìŠ¤í‚¬ì˜ ê¸°ë³¸ ìœ„ë ¥ ë° ì½”ì¸ì„ ê¸°ë°˜ìœ¼ë¡œ ìµœì¢… ê³µê²© ìœ„ë ¥ì„ ê³„ì‚°í•©ë‹ˆë‹¤.
+    /// </summary>
+    private int CalculateLimbusPower(int attackerAttackStat, int basePower, int coinCount, int coinBonus)
+    {
+        int finalPower = attackerAttackStat + basePower;
+
+        // ì½”ì¸ ë˜ì§€ê¸° (50% ì„±ê³µë¥  ê°€ì •)
         for (int i = 0; i < coinCount; i++)
         {
-            if (Random.Range(0, 2) == 1) // 50% ¼º°ø·ü °¡Á¤
+            if (UnityEngine.Random.Range(0, 2) == 1) // 1ì¼ ë•Œ ì„±ê³µ
             {
                 finalPower += coinBonus;
             }
         }
         return finalPower;
     }
-    private int CalculateLimbusDamage(CharacterStats attacker, CharacterStats defender)
-    {
-        // °íÁ¤ °ª ´ë½Å selectedskillÀÇ µ¥ÀÌÅÍ¸¦ »ç¿ë
-        if (selectedSkill == null)
-        {
-            Debug.LogError("¼±ÅÃµÈ ½ºÅ³ µ¥ÀÌÅÍ°¡ ¾÷½À´Ï´Ù. ±âº» °ø°İÀ» °¡Á¤ÇÕ´Ï´Ù.");
-            // ÀÓ½Ã ±âº» °ø°İ °ª »ç¿ë (¾øÀ» °æ¿ì¸¦ ´ëºñ)
-            return CalculateLimbusDamageFallback(5, 2, 3, defender);
-        }
-        // °ø°İ·Â °è»ê
-        int attackPower = CalculateLimbusPower(
-            selectedSkill.BasePower,
-            selectedSkill.CoinCount,
-            selectedSkill.CoinBonus
-            );
 
-        // ±âº» µ¥¹ÌÁö °è»ê
-        int baseDamage = attackPower - defender.Defender;
-        int damgeAfterResistance = baseDamage;
-
-        // ½ºÅ³ È¿°ú (»óÅÂ ÀÌ»ó) Àû¿ë ·ÎÁ÷ Ãß°¡
-        ApplySkillEffects(selectedSkill, defender);
-
-        return Mathf.Max(1, damageAfterResistance);
-    }
-    private int CalculateLimbusDamageFallback(int baseP, int coinC, int coinB, CharacterStats defender)
-    {
-        int power = CalculateLimbusPower(baseP, coinC, coinB);
-        return Mathf.Max(1, power - defender.Defender);
-    }
-
-    internal void OnSkillSelected(string v, CharacterStats selectedTarget)
-    {
-        throw new System.NotImplementedException();
-    }
+    /// <summary>
+    /// ìŠ¤í‚¬ì— í¬í•¨ëœ ìƒíƒœ ì´ìƒ íš¨ê³¼ë¥¼ íƒ€ê²Ÿì—ê²Œ ì ìš©í•©ë‹ˆë‹¤.
+    /// </summary>
     private void ApplySkillEffects(Skill skill, CharacterStats target)
     {
         if (skill.EffectsToApply != null)
         {
             foreach (var effect in skill.EffectsToApply)
             {
-                // ±âÁ¸ È¿°ú°¡ ÀÖ´ÂÁö È®ÀÎÇÏ°í DurationÀ» °»½ÅÇÏ°Å³ª, »õ È¿°ú¸¦ Ãß°¡
-                // °£´ÜÈ­¸¦ À§ÇØ ¿©±â¼­´Â ¹«Á¶°Ç »õ·Î Ãß°¡ÇÑ´Ù°í °¡Á¤
-                // ½ÇÁ¦ °ÔÀÓ¿¡¼­´Â Áßº¹ È¿°ú Ã³¸¯ º¹ÀâÇÏ¹Ç·Î, Unique ID µîÀ¸·Î °ü¸®ÇØ¾ß ÇÕ´Ï´Ù.
-
+                // ìƒˆë¡œìš´ StatusEffect ì¸ìŠ¤í„´ìŠ¤ë¥¼ ìƒì„±í•˜ì—¬ ë¦¬ìŠ¤íŠ¸ì— ì¶”ê°€
+                target.ActiveEffects.Add(new StatusEffect(
+                    effect.Name,
+                    effect.Type,
+                    effect.TargetStat,
+                    effect.Duration,
+                    effect.Value
+                ));
             }
         }
+    }
+
+    // ===================================================
+    // 8. ìœ í‹¸ë¦¬í‹°
+    // ===================================================
+
+    private CharacterView FindView(CharacterStats stats)
+    {
+        // ì”¬ì—ì„œ CharacterViewë¥¼ ì°¾ì•„ statsê°€ ì¼ì¹˜í•˜ëŠ” Viewë¥¼ ë°˜í™˜
+        return FindObjectsOfType<CharacterView>().FirstOrDefault(v => v.stats == stats);
     }
 }

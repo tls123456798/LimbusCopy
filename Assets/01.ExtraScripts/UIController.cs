@@ -1,4 +1,4 @@
-using System;
+ï»¿using System;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -8,29 +8,31 @@ using UnityEngine.UI;
 
 public class UIController : MonoBehaviour
 {
-    [Header("µ¿Àû ½ºÅ³ UI ¿ä¼Ò")]
-    public GameObject skillButtonPrefab; // ½ºÅ³ ¹öÆ° ÇÁ¸®ÆÕ
-    public Transform skillButtonParent; // ½ºÅ³ ¹öÆ°ÀÌ »ı¼ºµÉ ºÎ¸ğ Transform(Panel)
-
-    // ½Ì±ÛÅÏ ÆĞÅÏ (¿É¼Ç: Manager ¿Ü¿¡ UIµµ ½Ì±ÛÅÏÀ¸·Î Á¢±ÙÇÒ °æ¿ì)
+    // ì‹±ê¸€í„´ íŒ¨í„´
     public static UIController Instance { get; private set; }
 
-    // UI ¿ä¼Ò ¿¬°á (Unity Inspector¿¡¼­ ¿¬°á)
-    [Header("UI ¿ä¼Ò")]
-    public GameObject skillPanel; // ½ºÅ³ ¼±ÅÃ ÆĞ³Î (È°¼ºÈ­/ºñÈ°¼ºÈ­¿ë)
-    public Button attackButton; // ±âº» °ø°İ ¹öÆ° (°¡Á¤)
-    public TMP_Text turnInfoText; // ÇöÀç ÅÏ Á¤º¸ Ãâ·Â ÅØ½ºÆ®
+    // UI ìš”ì„œ ì—°ê²°
+    [Header("UI ìš”ì†Œ")]
+    public GameObject skillPanel; // ìŠ¤í‚¬ ì„ íƒ íŒ¨ë„
+    public Text turnInfoText; // í˜„ì¬ í„´ ì •ë³´ ì¶œë ¥ í…ìŠ¤íŠ¸
 
-    [Header("Å¸°ÙÆÃ")]
-    public LayerMask targetLayer; // Ä³¸¯ÅÍ°¡ Æ÷ÇÔµÈ ·¹ÀÌ¾î (Raycast¿ë)
-    private CharacterStats selectedTarget; // ÇöÀç ¸¶¿ì½º·Î ¼±ÅÃµÈ Å¸°Ù
+    [Header("ë™ì  ìŠ¤í‚¬ UI ìš”ì†Œ")]
+    // Inspectorì—ì„œ ì—°ê²° í•„ìˆ˜
+    public GameObject skillButtonPrefab; // ìŠ¤í‚¬ ë²„íŠ¼ í”„ë¦¬íŒ¹
+    public Transform skillButtonParent; // ë™ì  ë²„íŠ¼ ìƒì„±ë  ë¶€ëª¨
 
-    // »óÅÂ º¯¼ö
+    [Header("íƒ€ê²ŸíŒ…")]
+    public LayerMask targetLayer; // ìºë¦­í„°ê°€ í¬í•¨ëœ ë ˆì´ì–´
+
+    // ìƒíƒœ ë³€ìˆ˜
     private CombatManager combatManager;
     private bool isPlayerTurn = false;
-    private bool isSelectingTarget = false;
 
-    // ÃÊ±âÈ­ ¹× Unity LifeCycle
+    private CharacterStats selectedTarget; // ë§ˆìš°ìŠ¤ë¡œ ì„ íƒëœ íƒ€ê²Ÿ
+    private Skill selectedSkill; // ì„ íƒëœ Skill ê°ì²´
+    private bool isSelectingTarget;
+
+    // ì´ˆê¸°í™” ë° Unity LifeCycle
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -47,140 +49,186 @@ public class UIController : MonoBehaviour
         combatManager = CombatManager.Instance;
         if (combatManager == null)
         {
-            Debug.LogError("CombatManager¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù.");
+            Debug.LogError("CombatManagerë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
             return;
         }
 
-        // ÃÊ±â ¼³Á¤: UI ¼û±â±â
+        // ì´ˆê¸° ì„¤ì •: UI ìˆ¨ê¸°ê¸°
         skillPanel.SetActive(false);
-        // TurnInfoText ÃÊ±âÈ­ (¼±ÅÃ »çÇ×)
+        // TurnInfoText ì´ˆê¸°í™” (ì„ íƒ ì‚¬í•­)
         if (turnInfoText != null)
         {
-            turnInfoText.text = "ÀüÅõ ´ë±â Áß...";
+            turnInfoText.text = "ì „íˆ¬ ëŒ€ê¸° ì¤‘...";
         }
     }
     private void Update()
     {
-        // Å¸°Ù ¼±ÅÃ ¸ğµåÀÏ ¶§ ¸¶¿ì½º ÀÔ·Â Ã³¸®
+        // íƒ€ê²Ÿ ì„ íƒ ëª¨ë“œì¼ ë•Œ ë§ˆìš°ìŠ¤ ì…ë ¥ ì²˜ë¦¬
         if (isSelectingTarget)
         {
             HandleTargetInput();
         }
     }
-    // CombatManager ¿¡¼­ È£ÃâµÇ´Â ¸Ş¼­µå
+    // CombatManager ì—ì„œ í˜¸ì¶œë˜ëŠ” ë©”ì„œë“œ
 
     /// <summary>
-    /// CombatManager °¡ ÅÏ Á¤º¸¸¦ Ç¥½ÃÇÏ¶ó°í ¿äÃ»ÇÒ ¶§ È£ÃâµË´Ï´Ù.
+    /// í”Œë ˆì´ì–´ í„´ì¼ ë•Œ ìŠ¤í‚¬ ì„ íƒ UIë¥¼ ë³´ì—¬ì¤ë‹ˆë‹¤.
     /// </summary>
-    public void DisPlayturnInfo(CharacterStats actor)
-    {
-        turnInfoText.text = $"ÇöÀç ÅÏ: {actor.Id}";
-        isPlayerTurn = combatManager.party.Contains(actor);
-        if (isPlayerTurn)
-        {
-            // ÇÃ·¹ÀÌ¾î ÅÏÀÏ ¶§¸¸ ½ºÅ³/°ø°İ UI È°¼ºÈ­
-            ShowSkillSelection(actor.Skills); // actor.Skills´Â CharacterStats¿¡ Á¤ÀÇµÇ¾î ÀÖ´Ù°í °¡Á¤
-        }
-        else
-        {
-            skillPanel.SetActive(false);
-        }
-    }
-
-    private void ShowSkillSelection(List<string> skills)
-    {
-        throw new NotImplementedException();
-    }
-
-    /// <summary>
-    /// ÇÃ·¹ÀÌ¾î ÅÏÀÏ ¶§ ½ºÅ³ ¼±ÅÃ UI¸¦ º¸¿©Áİ´Ï´Ù.
-    /// </summary>
-    /// <param name="availableSkills">»ç¿ë °¡´ÉÇÑ ½ºÅ³ ¸ñ·Ï (¿©±â¼­´Â »ç¿ëÇÏÁö ¾Ê°í ¹öÆ°¸¸ È°¼ºÈ­)</param>
+    /// <param name="availableSkills">ì‚¬ìš© ê°€ëŠ¥í•œ ìŠ¤í‚¬ ëª©ë¡ (ì—¬ê¸°ì„œëŠ” ì‚¬ìš©í•˜ì§€ ì•Šê³  ë²„íŠ¼ë§Œ í™œì„±í™”)</param>
     public void ShowSkillSelection(CharacterStats actor)
     {
-        // ÀÌÀü »ı¼ºµÈ ¹öÆ° ¸ğµÎ Á¦°Å
-        foreach (Transform child in skillButtonParent)
+        isPlayerTurn = combatManager.party.Contains(actor);
+        if (!isPlayerTurn) return; // í”Œë ˆì´ì–´ í„´ì´ ì•„ë‹ˆë©´ ì²˜ë¦¬í•˜ì§€ ì•ŠìŒ
+
+        if (turnInfoText != null)
         {
-            Destroy(child.gameObject);
+            turnInfoText.text = $"í˜„ì¬ í„´: {actor.Id} (ìŠ¤í‚¬ ì„ íƒ)";
         }
-        if (actor.AvailableSkills == null || actor.AvailableSkills.Count == 0)
+        // ì´ì „ ìƒì„±ëœ ë²„íŠ¼ ëª¨ë‘ ì œê±° (í´ë¦¬ì–´)
+        if (skillButtonParent != null)
+        {
+            foreach (Transform child in skillButtonParent)
+            {
+                Destroy(child.gameObject);
+            }
+        }
+        // ìŠ¤í‚¬ ëª©ë¡ì´ ì—†ê±°ë‚˜ Parent ì„¤ì •ì´ ì•ˆ ë˜ìˆìœ¼ë©´ íŒ¨ë„ ìˆ¨ê¹€
+        if (actor.AvailableSkills == null || actor.AvailableSkills.Count == 0 || skillButtonParent == null)
         {
             skillPanel.SetActive(false);
             return;
         }
-        // ½ºÅ³ ¸ñ·ÏÀ» ¼øÈ¸ÇÏ¸ç ¹öÆ° µ¿Àû »ı¼º
+        // ìŠ¤í‚¬ ëª©ë¡ì„ ìˆœíšŒí•˜ë©° ë²„íŠ¼ ë™ì  ìƒì„±
         foreach (var skill in actor.AvailableSkills)
         {
-            // ÄğÅ¸ÀÓÀÌ 0ÀÌ ¾Æ´Ñ ½ºÅ³Àº ½ºÅ´ (ÄğÅ¸ÀÓ ·ÎÁ÷Àº EndTurnCleanup¿¡¼­ °ü¸®µÊ)
-            //if(actor.SkillCooldowns.ContainsKey(skill.Id) && actor.SkillCooldowns[skill.Id] > 0)
-            //continue;
-
-            // ¹öÆ° »ı¼º
+            // ì¿¨íƒ€ì„ì´ 0ì´ ì•„ë‹Œ ìŠ¤í´ì€ ìŠ¤í‚µ (ë¹„í™œì„±í™” ìƒíƒœë¡œ ë§Œë“¤ê±°ë‚˜ continue)
+            if (actor.SkillCooldowns.ContainsKey(skill.Id) && actor.SkillCooldowns[skill.Id] > 0)
+            {
+                continue;
+            }
+            // ë²„íŠ¼ ìƒì„± ë° ì„¤ì •
             GameObject buttonObj = Instantiate(skillButtonPrefab, skillButtonParent);
             Button buttonComp = buttonObj.GetComponent<Button>();
-            // ¹öÆ° ÅØ½ºÆ® ¼³Á¤
-            buttonObj.GetComponentInChildren<Text>().text = skill.Name;
 
-            // ¹öÆ° Å¬¸¯ ½Ã Å¸°Ù ¼±ÅÃ ¸ğµå·Î ÀúÈ¯ÇÏ¸é¼­ Skill °´Ã¼ ÀÚÃ¼¸¦ Àü´Ş
+            // í…ìŠ¤íŠ¸ ì»´í¬ë„ŒíŠ¸ ì•ˆì „ í˜¸ì¶œ ë° ì„¤ì •
+            Text buttonText = buttonObj.GetComponentInChildren<Text>();
+            if (buttonText != null)
+            {
+                buttonText.text = skill.Name;
+            }
+            else
+            {
+                // 2. TextMeshProUGUI ì»´í¬ë„ŒíŠ¸ë¥¼ ì‚¬ìš©í•˜ëŠ” ê²½ìš°
+                // ğŸš¨ UnityEngine.UIê°€ ì•„ë‹Œ TMPro ë„¤ì„ìŠ¤í˜ì´ìŠ¤ë¥¼ ì‚¬ìš©í•´ì•¼ í•©ë‹ˆë‹¤.
+                TMPro.TextMeshProUGUI tmproText = buttonObj.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+
+                if (tmproText != null)
+                {
+                    tmproText.text = skill.Name;
+                }
+                else
+                {
+                    Debug.LogError($"ê²½ê³ : ìŠ¤í‚¬ ë²„íŠ¼ í”„ë¦¬íŒ¹ '{skillButtonPrefab.name}'ì— Text ë˜ëŠ” TextMeshProUGUI ì»´í¬ë„ŒíŠ¸ê°€ ì—†ìŠµë‹ˆë‹¤.");
+                }
+            }
+            // ë²„íŠ¼ í´ë¦­ ë¦¬ìŠ¤ë„ˆ ë“±ë¡: íƒ€ê²Ÿ ì„ íƒ ëª¨ë“œë¡œ ì „í™˜í•˜ë©° Skill ê°ì²´ ì „ë‹¬
+            // ëŒë‹¤ì‹ ë‚´ì—ì„œ skill ë³€ìˆ˜ ìº¡ì²˜ë¥¼ í†µí•´ ì •í™•í•œ Skill ê°ì²´ë¥¼ ì „ë‹¬í•©ë‹ˆë‹¤.
             buttonComp.onClick.AddListener(() => StartTargetSelection(skill));
         }
-
         skillPanel.SetActive(true);
         isSelectingTarget = false;
         selectedTarget = null;
     }
-    // UI ÀÔ·Â Ã³¸® ·ÎÁ÷
+    // UI ì…ë ¥ ì²˜ë¦¬ ë¡œì§
 
     /// <summary>
-    /// ½ºÅ³ ¹öÆ° Å¬¸¯ ½Ã Å¸°Ù ¼­ÅÃ ¸ğµå¸¦ ½ÃÀÛÇÕ´Ï´Ù.
+    /// ìŠ¤í‚¬ ë²„íŠ¼ í´ë¦­ ì‹œ íƒ€ê²Ÿ ì„œíƒ ëª¨ë“œë¥¼ ì‹œì‘í•©ë‹ˆë‹¤.
     /// </summary>
-    /// <param name="skillId">¼±ÅÃµÈ ½ºÅ³ ID</param>
+    /// <param name="skillId">ì„ íƒëœ ìŠ¤í‚¬ ID</param>
     public void StartTargetSelection(Skill skill)
     {
         if (!isPlayerTurn) return;
 
-        //selectedSkill = skill;
-        isSelectingTarget = true;
-        turnInfoText.text = $"Å¸°Ù ¼±ÅÃ Áß...({skill.Name})";
-        // ¼±ÅÃµÈ ½ºÅ³ ID¸¦ ÀÓ½Ã·Î ÀúÀåÇØ µÎ¾ú´Ù°¡ ÀÔ·Â ¿Ï·á ½Ã CombatManager·Î Àü´Ş
-        // (ÀÌ ¿¹Á¦¿¡¼­´Â attackButton ¸®½º³Ê¿¡ Á÷Á¢ "BasicAttack"À» Àü´Ş
+        selectedSkill = skill; //Skill ê°ì²´ ì €ì¥
+
+        // ìŠ¤í‚¬ ë²”ìœ„ì— ë”°ë¥¸ ì¦‰ì‹œ ì²˜ë¦¬
+        if (selectedSkill.Scope == TargetScope.Self)
+        {
+            // ìì‹ ì„ íƒ€ê²Ÿìœ¼ë¡œ ì¦‰ì‹œ ì§€ì •í•˜ê³  ì „íˆ¬ ê³„ì‚° ìš”ì²­
+            selectedTarget = combatManager.currentActor;
+            isSelectingTarget = false;
+            skillPanel.SetActive(false);
+            combatManager.OnSkillSelected(selectedSkill, selectedTarget);
+        }
+        else if (selectedSkill.Scope == TargetScope.AllEnemies)
+        {
+            // (TODO: AllEnemies ì²˜ë¦¬ ë¡œì§ ì¶”ê°€ í•„ìš”. í˜„ì¬ëŠ” ë‹¨ì¼ íƒ€ê²ŸíŒ…ë§Œ ê°€ì •í•˜ê³  ì§„í–‰)
+            // ì„ì‹œë¡œ ê·¸ëƒ¥ ì „íˆ¬ ê³„ì‚°ìœ¼ë¡œ ë„˜ë ¤ CombatManagerê°€ ëª¨ë“  ì ì„ ì²˜ë¦¬í•˜ë„ë¡ í•  ìˆ˜ ìˆìŒ
+            isSelectingTarget = false;
+            skillPanel.SetActive(false);
+            combatManager.OnSkillSelected(selectedSkill, null); // íƒ€ê²Ÿì´ nullì´ë©´ ì „ì²´ ê³µê²© ìœ¼ë¡œ ì²˜ë¦¬í•˜ë„ë¡ CombatManagerì—ì„œ êµ¬í˜„ í•„ìš”
+        }
+        else // SingleEnemy, SingleAlly ë“± íƒ€ê²Ÿ ì§€ì •ì´ í•„ìš”í•œ ê²½ìš°
+        {
+            isSelectingTarget = true;
+            if (turnInfoText != null)
+            {
+                turnInfoText.text = $"íƒ€ê²Ÿ ì„ íƒ ì¤‘...({skill.Name})";
+            }
+        }
     }
+
     /// <summary>
-    /// Å¸°Ù ¼±ÅÃ ¸ğµåÀÏ ¶§ ¸¶¿ì½º ÀÔ·ÂÀ» Ã³¸®ÇÕ´Ï´Ù.
+    /// íƒ€ê²Ÿ ì„ íƒ ëª¨ë“œì¼ ë•Œ ë§ˆìš°ìŠ¤ ì…ë ¥ì„ ì²˜ë¦¬í•©ë‹ˆë‹¤.
     /// </summary>
     private void HandleTargetInput()
     {
-        // ¸¶¿ì½º·Î Å¸°Ù ÇÏÀÌ¶óÀÌÆ® (½Ã°¢Àû ÇÇµå¹é ·ÎÁ÷)
-        // Raycast¸¦ »ç¿ëÇÏ¿© ¸¶¿ì½º À§Ä¡ÀÇ Ä³¸¯ÅÍ¸¦ È®ÀÎÇÏ°í ÇÏÀÌ¶óÀÌÆ®ÇÒ ¼ö ÀÖ½À´Ï´Ù.
-
-        // ¸¶¿ì½º ¿ŞÂÊ ¹öÆ° Å¬¸¯ ½Ã Å¸°Ù È®Á¤
-        if (Input.GetMouseButtonDown(0))
+        // ë§ˆìš°ìŠ¤ ì™¼ìª½ ë²„íŠ¼ í´ë¦­ ì‹œ íƒ€ê²Ÿ í™•ì •
+        if(Input.GetMouseButtonDown(0))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
 
-            // CharacterView ¶Ç´Â CharacterStats ÄÄÆ÷³ÍÆ®°¡ ºÙÀº ¿ÀºêÁ§Æ®¸¦ Å¸°ÙÆÃ
-            if (Physics.Raycast(ray, out hit, 100f, targetLayer))
+            // Target Layerì— ëŒ€í•´ì„œë§Œ Raycast ìˆ˜í–‰
+            if(Physics.Raycast(ray, out hit, 100f, targetLayer))
             {
                 CharacterView targetView = hit.collider.GetComponent<CharacterView>();
-                if (targetView != null)
+
+                if(targetView != null && targetView.stats != null)
                 {
-                    // Å¸°ÙÀÌ combatManagerÀÇ Àû ¸®½ºÆ®¿¡ Æ÷ÇÔµÇ´ÂÁö È®ÀÎ
-                    // °ø°İ ´ë»óÀº Àû¸¸ °¡´ÉÇÏ´Ù°í °¡Á¤
-                    if (combatManager.enemies.Contains(targetView.stats))
+                    // í˜„ì¬ëŠ” 'ë‹¨ì¼ ì ' íƒ€ê²ŸíŒ…ë§Œ í—ˆìš©í•œë‹¤ê³  ê°€ì • (TargetScope.SingleEnemy)
+                    if(selectedSkill.Scope == TargetScope.SingleEnemy && combatManager.enemies.Contains(targetView.stats))
                     {
-                        selectedTarget = targetView.stats;
-
-                        // ÀÔ·Â ¿Ï·á ¹× CombatManager ¿¡°Ô Àü´Ş
-                        isSelectingTarget = false;
-                        skillPanel.SetActive(false);
-                        turnInfoText.text = $"Å¸°Ù È®Á¤: {selectedTarget.Id}";
-
-                        // CombatManager¿¡°Ô ½ºÅ³ ID¿Í Å¸°Ù Àü´Ş (¿©±â¼­´Â "BasicAttack" °¡Á¤)
-                        //combatManager.OnSkillSelected(selectedSkill, selectedTarget);
+                        ConfirmTarget(targetView.stats);
+                    }
+                    else if(selectedSkill.Scope == TargetScope.SingleAlly && combatManager.party.Contains(targetView.stats))
+                    {
+                        ConfirmTarget(targetView.stats);
+                    }
+                    else
+                    {
+                        // ìœ íš¨í•˜ì§€ ì•ŠëŠ” íƒ€ê²Ÿ íƒ€ì…
+                        Debug.Log("ì„ íƒëœ íƒ€ê²Ÿì€ í˜„ì¬ ìŠ¤í‚¬ì˜ ìœ íš¨ ë²”ìœ„ê°€ ì•„ë‹™ë‹ˆë‹¤.");
                     }
                 }
             }
         }
     }
+    private void ConfirmTarget(CharacterStats target)
+    {
+        selectedTarget =target;
+
+        // ì…ë ¥ ì™„ë£Œ ë° CombatManagerì—ê²Œ Skill ê°ì²´ì™€ íƒ€ê²Ÿ ì „ë‹¬
+        isSelectingTarget = false;
+        skillPanel.SetActive(false);
+
+        if(turnInfoText != null)
+        {
+            turnInfoText.text = $"íƒ€ê²Ÿ í™•ì •: {selectedTarget.Id}ë¡œ {selectedSkill.Name} ì‚¬ìš©";
+        }
+
+        // í•µì‹¬ í˜¸ì¶œ: CombatManagerì˜ ìƒíƒœë¥¼ CalculatingCombatìœ¼ë¡œ ì „í™˜
+        combatManager.OnSkillSelected(selectedSkill,selectedTarget);
+    }
 }
+  

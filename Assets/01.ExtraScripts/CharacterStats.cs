@@ -1,66 +1,72 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using System.Collections.Generic;
+using Unity.VisualScripting.Antlr3.Runtime;
+using System.Linq;
 
-[System.Serializable] // À¯´ÏÆ¼ ÀÎ½ºÆåÅÍ¿¡ Ç¥½ÃµÇµµ·Ï ¼³Á¤
+[System.Serializable] // ìœ ë‹ˆí‹° ì¸ìŠ¤í™í„°ì— í‘œì‹œë˜ë„ë¡ ì„¤ì •
 
 public class CharacterStats
 {
-    public List<Skill> AvailableSkills = new List<Skill>(); // »ç¿ëÇÒ ¼ö ÀÖ´Â ½ºÅ³ ¸ñ·Ï
-    public List<StatusEffect> ActiveEffects = new List<StatusEffect>(); // ÇöÀç Àû¿ëµÈ »óÅÂ ÀÌ»ó
-   
-    // Ä³¸¯ÅÍÀÇ °íÀ¯ ID (¾î¶² Ä³¸¯ÅÍÀÎÁö ½Äº°)
+    // ê¸°ë³¸ ëŠ¥ë ¥ì¹˜
     public string Id;
-
-    // ±âº» ´É·ÂÄ¡
     public int MaxHP;
     public int CurrentHP;
+
     public int Attack;
-    public int Speed; // ÅÏ ¼ø¼­ °áÁ¤¿¡ »ç¿ë
-    public int Defender;
+    public int Speed;
+    public int Defense;
 
-    // ½ºÅ³ Á¤º¸ (ÄÚÀÎ, À§·Â µîÀ» ´ãÀ» ±¸Á¶Ã¼)
-    public List<string> Skills;
+    [Header("ê¸°ë³¸ ìŠ¤íƒ¯")]
+    // ë²„í”„/ë””ë²„í”„ ë³µì›ì„ ìœ„í•œ ê¸°ë´‡ ìŠ¤íƒ¯ ì €ì¥
+    public int BaseAttack;
+    public int BaseDefense;
 
-    // »ı¼ºÀÚ (Constructor)
-    public CharacterStats(string id, int hp, int atk, int spd, int def)
+    // ìŠ¤í‚¬ ë° ìƒíƒœ ê´€ë¦¬
+    public List<Skill> AvailableSkills = new List<Skill>();
+    public Dictionary<string, int> SkillCooldowns = new Dictionary<string, int>();
+    public List<StatusEffect> ActiveEffects = new List<StatusEffect>();
+
+    // ìƒì„±ì
+    public CharacterStats(string id, int maxHP, int attack, int speed, int defense)
     {
-        this.Id = id;
-        this.MaxHP = hp;
-        this.CurrentHP = hp;
-        this.Attack = atk;
-        this.Speed = spd;
-        this.Defender = def;
+        Id = id;
+        MaxHP = maxHP;
+        Attack = attack;
+        Speed = speed;
+        Defense = defense;
+
+        // ê¸°ë³¸ ìŠ¤íƒ¯ ì €ì¥
+        BaseAttack = attack;
+        BaseDefense = defense;
+
+        // í•„ë“œ ì´ˆê¸°í™”
+        AvailableSkills = new List<Skill>();
+        SkillCooldowns = new Dictionary<string, int>();
+        ActiveEffects = new List<StatusEffect>();
+
+        // ê¸°ë³¸ ìŠ¤í‚¬ ì´ˆê¸°í™” í˜¸ì¶œ
+        InitializeBaseSkills();
     }
-
-    public object Resistances { get; internal set; }
-    public object SkillCooldowns { get; internal set; }
-
-    // ¸Ş¼­µå ¿¹½Ã: µ¥¹ÌÁö ¹Ş±â
+    private void InitializeBaseSkills()
+    {
+        // Skill("Id", "Name", Scope, BasePower, CoinCount, CoinBonus, Cooldown)
+        Skill basicAttack = new Skill("basicAttack", "ê¸°ë³¸ ê³µê²©", TargetScope.SingleEnemy,
+            /* Power */ 5, /* CoinCount */ 1, /* CoinBonus */ 3, /* Cooldown */ 0);
+        if(!AvailableSkills.Any(s => s.Id == basicAttack.Id))
+        {
+            AvailableSkills.Add(basicAttack);
+            SkillCooldowns.Add(basicAttack.Id,0);
+        }
+    }
+    // í•µì‹¬ ì „íˆ¬ ë©”ì„œë“œ
     public void TakeDamage(int damage)
     {
-        CurrentHP -= damage;
-        if (CurrentHP < 0) CurrentHP = 0;
+        if (damage <0) damage = 0;
+        CurrentHP = Mathf.Max(0, CurrentHP - damage); // 0 ë¯¸ë§Œ ë°©ì§€
 
-        UnityEngine.Debug.Log($"{damage} µ¥¹ÌÁö¸¦ ¹Ş¾Ò½À´Ï´Ù. ³²Àº HP: {CurrentHP}");
-    }
-    public enum SinAttribute {red,orange,yellow,green,blue,deepblue,puple } // ¼Ó¼º ¿¹½Ã(ÃßÈÄ ±³Ã¼)
-
-    // »óÅÂ ÀÌ»ó Á¤º¸¸¦ ´ã¾Æ µÎ´Â ±¸Á¶Ã¼/Å¬·¡½º Á¤ÀÇ
-    public class StatusEffect
-    {
-        public string Name; // »óÅÂÀÌ»ó ÀÌ¸§
-        public int Stacks; // ÁßÃ¸ È½¼ö
-        public int Duration; // ³²Àº Áö¼Ó ½Ã°£ (ÅÏ ¼ö)
-    }
-    public class CharacterSTats
-    {
-        // »õ·Î¿î ÇÙ½É ÀüÅõ ÇÊµå
-        public SinAttribute AttackSinType; // ÇöÀç ½ºÅ³ÀÇ °ø°İ ¼Ó¼º
-        public Dictionary<SinAttribute, float> Resistances; // ¼Ó¼ºº° ³»¼º °è¼ö
-
-        public Dictionary<string, int> SkillCooldowns = new Dictionary<string, int>(); // ½ºÅ³ ÀÌ¸§º° ÄğÅ¸ÀÓ
-        public Dictionary<SinAttribute, int> EgoResources = new Dictionary<SinAttribute, int>(); // ÁË¾Ç ÀÚ¿ø º¸À¯·®
-
-        public List<StatusEffect> ActiveEffects = new List<StatusEffect>(); // ÇöÀç °É¸° »óÅÂ ÀÌ»ó ¸ñ·Ï
+        if(CurrentHP == 0)
+        {
+            // ì‚¬ë§ì²˜ë¦¬
+        }
     }
 }
