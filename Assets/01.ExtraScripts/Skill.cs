@@ -30,4 +30,15 @@ public class Skill
         CoinBonus = coinBonus;  
         Cooldown = cd;
     }
+    public Skill(string name, int basePower, TargetScope scope)
+    {
+        Id = name;
+        Name = name;
+        BasePower = basePower;
+        Scope = scope;
+
+        CoinCount = 0;
+        CoinBonus = 0;
+        Cooldown = 0;
+    }
 }

@@ -66,15 +66,43 @@ public class CombatManager : MonoBehaviour
             return;
         }
 
-        // 🚨 임시 캐릭터 생성 및 스탯 설정 (ID, MaxHP, ATK, SPD, DEF 순서)
         CharacterStats player = new CharacterStats("Player", 100, 15, 10, 10);
         CharacterStats enemy = new CharacterStats("Enemy", 80, 20, 8, 8);
+
+        Skill basicAttack = new Skill("공격", 10, TargetScope.SingleEnemy);
+        player.AvailableSkills.Add(basicAttack);
+
+        LinkStatsToViews(player, "Player"); // "player"는 Hierachy 오브젝트 이름
+        LinkStatsToViews(enemy, "Enemy"); // "Enemey"는 Hierachy 오브젝트의 이름
 
         party.Add(player);
         enemies.Add(enemy);
 
         // 🚨 [핵심 수정] Setup 상태로 진입하여 턴 순서를 준비
         SetState(CombatState.Setup);
+    }
+    private void LinkStatsToViews(CharacterStats stats, string objectName)
+    {
+        GameObject go = GameObject.Find(objectName);
+        if(go != null)
+        {
+            CharacterView view = go.GetComponent<CharacterView>();
+            if (view != null)
+            {
+                view.stats = stats;
+                view.healthBarSlider.maxValue = stats.MaxHP;
+                view.UpdateHealthBar();
+                Debug.Log($"뷰 연결 성공: {stats.Id}");
+            }
+            else
+            { 
+                Debug.LogError($"오류: 오브젝트'{objectName}'에 CharacterView 컴포넌트가 없습니다. ");
+            }
+        }
+        else
+        {
+            Debug.LogError($"오류: Hierachy에서 오브젝트 '{objectName}'을 찾을 수 없습니다.");
+        }
     }
 
     // ===================================================
@@ -112,13 +140,13 @@ public class CombatManager : MonoBehaviour
                 }
 
                 currentActor = turnOrderQueue.Dequeue();
+                uiController.ShowSkillSelection(currentActor);
 
                 // 플레이어 턴
                 if (party.Contains(currentActor))
                 {
                     // UIController에게 스킬 선택 UI 활성화 요청
                     uiController.ShowSkillSelection(currentActor);
-                    SetState(CombatState.WaitingForInput);
                     return;
                 }
                 // 적 AI 턴 (임시 로직)

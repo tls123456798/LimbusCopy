@@ -26,11 +26,14 @@ public class CharacterStats
     public Dictionary<string, int> SkillCooldowns = new Dictionary<string, int>();
     public List<StatusEffect> ActiveEffects = new List<StatusEffect>();
 
+    public object Name { get; internal set; }
+
     // 생성자
     public CharacterStats(string id, int maxHP, int attack, int speed, int defense)
     {
         Id = id;
         MaxHP = maxHP;
+        CurrentHP = maxHP;
         Attack = attack;
         Speed = speed;
         Defense = defense;

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,7 +12,7 @@ public class CharacterView : MonoBehaviour
     public CharacterStats stats;
 
     [Header("시각적 요소")]
-    public Animator animator;
+    public Animator animator; // 캐릭터 애니메이션 제어
     public Slider healthBarSlider; // HP를 표시할 UI Slider
 
     public void Start()
@@ -94,6 +95,27 @@ public class CharacterView : MonoBehaviour
 
     internal void PlayAttackAnimation()
     {
-        throw new NotImplementedException();
+        if(animator != null)
+        {
+            animator.SetTrigger("Attack");
+        }
+        // 애니메이션 재생 후 CombatManager 에게 완료를 알려야 합니다.
+        // 현재는 애니메이션이 없다고 가정하고바로 완료 신호를 보냅니다.
+        // 실제 게임에서는 애니메이션 이벤트/코루틴을 사용하여 정확한 시점에 호출해야 합니다.
+        StartCoroutine(NotifyCombatManagerAfterDelay(0.5f)); // 0.5초 딜레이 후 완료 통보
     }
+    /// <summary>
+    /// CombatManager에게 애니메이션 완료를 통보하는 코루틴입니다.
+    /// 
+    /// </summary>
+    private IEnumerator NotifyCombatManagerAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+
+        if(CombatManager.Instance != null)
+        {
+            CombatManager.Instance.OnAnimationFinished();
+        }
+    }
+    // (TODO: 피격, 사망 애니메이션 메서드 추가)
 }
