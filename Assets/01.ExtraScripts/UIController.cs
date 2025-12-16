@@ -56,58 +56,52 @@ public class UIController : MonoBehaviour
     // === 턴 시작 시 호출 (CombatManager.SetState(StartTurn)에서 호출됨) ===
     public void ShowSkillSelection(CharacterStats actor)
     {
-        // 현재 액터를 설정하고 턴 정보를 업데이트합니다.
         currentActor = actor;
-        if (turnInfoText != null)
+
+        // 필수 UI 필드 존재 여부 확인 (NRE 방지)
+        if(skillPanel == null || skillButtonPrefab == null || skillButtonParent == null)
+        {
+            Debug.LogError("UIController의 필수 UI 필드 연결이 누락되었습니다. 상태 전환 실패");
+            return;
+        }
+        // 턴 정보 업데이트
+        if(turnInfoText != null)
         {
             turnInfoText.text = $"{actor.Name}의 턴입니다.";
         }
-
-        // 🚨 이전에 논의된 문제: 스킬 목록이 비어 있으면 WaitingForInput으로 넘어가지 못함
-        if (actor.AvailableSkills == null || actor.AvailableSkills.Count == 0 || skillButtonParent == null || skillButtonPrefab == null)
+        // 스킬 목록 확인 (스킬 데이터 누락 방지)
+        if(actor.AvailableSkills == null || actor.AvailableSkills.Count == 0)
         {
-            Debug.LogWarning($"{actor.Name}에게 사용할 수 있는 스킬이 없거나 UI 컴포넌트가 누락되어 스킬 패널을 표시할 수 없습니다.");
-            if (skillPanel != null)
-            {
-                skillPanel.SetActive(false);
-            }
-            return; // 🚨 스킬이 없으면 WaitingForInput으로 전환할 필요가 없으므로 여기서 종료
+            Debug.LogWarning($"{actor.Name}에게 사용할 수 없어 스킬 패널을 표시하지 않습니다.");
+            skillPanel.SetActive(false);
+            return;
         }
-        foreach (Transform child in skillButtonParent.transform)
+        foreach(var  skill in actor.AvailableSkills)
         {
+            // 인스턴스호 시 skillButtonParent를 부모로 설정
+            GameObject buttonObj = Instantiate(skillButtonPrefab, skillButtonParent);
+            Button buttonComp = buttonObj.GetComponent<Button>();
+
+            // 버튼 텍스트 설정 (NRE 방지용 TMPro 널 체크 포함)
+            TextMeshProUGUI buttonText = buttonObj.GetComponentInChildren<TextMeshProUGUI>();
+
+            if(buttonText != null)
             {
-                Destroy(child.gameObject);
+                buttonText.text = skill.Name;
             }
-
-            // 스킬 목록을 순회하며 버튼 동적 생성
-            foreach (var skill in actor.AvailableSkills)
+            else
             {
-                GameObject buttonObj = Instantiate(skillButtonPrefab, skillButtonParent);
-                Button buttonComp = buttonObj.GetComponent<Button>();
-
-                // 🚨 80줄 부근 NRE 문제 해결을 위한 안전 코드 (이전 단계에서 논의됨)
-                TextMeshProUGUI buttonText = buttonObj.GetComponentInChildren<TextMeshProUGUI>();
-                if (buttonText != null)
-                {
-                    buttonText.text = skill.Name;
-                }
-                else
-                {
-                    // TMPro 컴포넌트가 없는 경우를 위한 로그
-                    Debug.LogError($"'{skillButtonPrefab.name}' 프리팹 내부에 TextMeshProUGUI 컴포넌트가 없습니다.");
-                }
-
-                // 버튼 클릭 리스너 등록: 타겟 선택 모드로 전환하며 Skill 객체 전달
-                buttonComp.onClick.AddListener(() => StartTargetSelection(skill));
+                Debug.LogError($"'{skillButtonPrefab.name}' 프리팹 내부에 TextMeshProUGUI 컴폰너트가 없어 스킬 이름 설정 불가.");
             }
-
-            // 스킬 선택 패널 활성화
-            skillPanel.SetActive(true);
-
-            // 🚨 CombatManager에게 상태를 WaitingForInput으로 바꾸도록 요청
-            // 이 코드가 성공적으로 실행되어야 다음 상태로 전환됩니다.
-            CombatManager.Instance.SetState(CombatState.WaitingForInput);
+            // 버튼 클릭 리스너 등록
+            buttonComp.onClick.AddListener(() => StartTargetSelection(skill));
         }
+        // 스킬 선택 패널 활성화
+        skillPanel.SetActive(true);
+
+        // 상태 전환 요청 (WaitingForInput 으로 진입)
+        // 이 코드가 성공적으로 실행되어야 CombatManager가 다음 상태로 넘어갑니다.
+        CombatManager.Instance.SetState(CombatState.WaitingForInput);
     }
 
     // === 타겟 선택 로직 ===
@@ -141,12 +135,23 @@ public class UIController : MonoBehaviour
             if (Physics.Raycast(ray, out hit, 100f, targetLayer))
             {
                 // 타겟 오브젝트에서 CharacterStats 컴포넌트를 찾음
-                CharacterStats target = hit.collider.GetComponentInParent<CharacterStats>();
+                CharacterView targetView = hit.collider.GetComponentInParent<CharacterView>();
 
-                if (target != null)
+                if (targetView != null)
                 {
-                    // 타겟팅 완료
-                    EndTargetSelection(target);
+                    targetView = hit.collider.GetComponent<CharacterView>();
+                }
+                if(targetView != null)
+                {
+                    CharacterStats target = targetView.stats;
+                    if(target != null)
+                    {
+                        EndTargetSelection(target);
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning($"레이캐스트가 {hit.collider.name}에 맞았지만, CharacterStats 컴포넌트를 찾을 수 없습니다.");
                 }
             }
         }
@@ -155,7 +160,9 @@ public class UIController : MonoBehaviour
     private void EndTargetSelection(CharacterStats target)
     {
         isSelectingTarget = false;
-        selectedTarget = target;
+        // 선택된 타겟을 CcombatManager 가 참조할 수 있도록 설정
+        CombatManager.Instance.selectedTarget = target;
+        CombatManager.Instance.selectedSkill = selectedSkill;
 
         // CombatManager에게 계산을 시작하도록 요청
         CombatManager.Instance.SetState(CombatState.CalculatingCombat);

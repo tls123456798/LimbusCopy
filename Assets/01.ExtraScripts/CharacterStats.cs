@@ -11,22 +11,51 @@ public class CharacterStats
     public string Id;
     public int MaxHP;
     public int CurrentHP;
-
-    public int Attack;
     public int Speed;
-    public int Defense;
+
 
     [Header("기본 스탯")]
     // 버프/디버프 복원을 위한 기봇 스탯 저장
     public int BaseAttack;
     public int BaseDefense;
 
+    // 계산된 능력치 속성
+    public int Attack
+    {
+        get
+        {
+            int calculatedAttack = BaseAttack;
+
+            // Attack을 변경하는 StatusEffect를 순회하며 최종 공격력 계산
+            foreach(var effect in ActiveEffects.Where(e=> e.TargetStat == StatType.Attack))
+            {
+                // 일반적으로 버프/디버프 값은 합산됨 (가장 단순한 모델)
+                calculatedAttack += (int)effect.Value;
+            }
+            // 최종 공격력이 최소 0이 되도록 보장
+            return Mathf.Max(0, calculatedAttack);
+        }
+    }
+    public int Defense
+    {
+        get
+        {
+            int calculatedDefense = BaseDefense;
+
+            // Defense를 변경하는 StatusEffect를 순회하며 최종 방어력 계산
+            foreach(var effect in ActiveEffects.Where(e=> e.TargetStat == StatType.Defense))
+            {
+                calculatedDefense += (int)effect.Value;
+            }
+            return Mathf.Max(0,calculatedDefense);
+        }
+    }
     // 스킬 및 상태 관리
     public List<Skill> AvailableSkills = new List<Skill>();
     public Dictionary<string, int> SkillCooldowns = new Dictionary<string, int>();
     public List<StatusEffect> ActiveEffects = new List<StatusEffect>();
 
-    public object Name { get; internal set; }
+    public string Name { get; set; }
 
     // 생성자
     public CharacterStats(string id, int maxHP, int attack, int speed, int defense)
@@ -34,9 +63,10 @@ public class CharacterStats
         Id = id;
         MaxHP = maxHP;
         CurrentHP = maxHP;
-        Attack = attack;
         Speed = speed;
-        Defense = defense;
+
+        // Id를 Name에도 설정 (CombatManager에서 로그 출력을 위해 필요)
+        Name = id;
 
         // 기본 스탯 저장
         BaseAttack = attack;
@@ -52,13 +82,24 @@ public class CharacterStats
     }
     private void InitializeBaseSkills()
     {
-        // Skill("Id", "Name", Scope, BasePower, CoinCount, CoinBonus, Cooldown)
-        Skill basicAttack = new Skill("basicAttack", "기본 공격", TargetScope.SingleEnemy,
-            /* Power */ 5, /* CoinCount */ 1, /* CoinBonus */ 3, /* Cooldown */ 0);
+        // Skill 상세 생성자 인자 순서
+        // Skill("Id", "Name", Scope, BasePower, CoinCount, CoinBonus, Cooldown, ClashBase, ClashBonus)
+
+        // Skill 생성자에 ClashBase와 ClashBonus 인자 추가
+        Skill basicAttack = new Skill(
+            id: "basicAttack",
+            name: "기본 공격",
+            scope: TargetScope.SingleEnemy,
+            power: 5,
+            coinCount: 1,
+            coinBonus: 3,
+            cd: 0,
+            clashBase: 5,
+            clashBonus: 0);
         if(!AvailableSkills.Any(s => s.Id == basicAttack.Id))
         {
             AvailableSkills.Add(basicAttack);
-            SkillCooldowns.Add(basicAttack.Id,0);
+            SkillCooldowns.Add(basicAttack.Id, 0);
         }
     }
     // 핵심 전투 메서드
