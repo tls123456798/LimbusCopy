@@ -20,9 +20,12 @@ public class UIController : MonoBehaviour
     [Header("타겟팅")]
     public LayerMask targetLayer;       // 타겟팅 가능한 오브젝트 레이어 (Enemy)
 
+    [Header("전투 결과 표시")]
+    public GameObject clashResultPanel; // 합 결과를 표시할 패널
+    public TextMeshProUGUI clashResultText; // 합 결과 텍스트
+
     // === 내부 상태 ===
     private bool isSelectingTarget = false;
-    private CharacterStats selectedTarget;
     private CharacterStats currentActor;
     private Skill selectedSkill;
 
@@ -43,7 +46,7 @@ public class UIController : MonoBehaviour
     void Start()
     {
         // NullReferenceException 방지를 위해 안전 체크
-        if (skillPanel == null)
+        if (skillPanel == null || clashResultPanel == null)
         {
             Debug.LogError("UIController: Skill Panel이 Inspector에 연결되지 않았습니다.");
             return;
@@ -51,18 +54,33 @@ public class UIController : MonoBehaviour
 
         // 초기에는 UI를 숨깁니다.
         skillPanel.SetActive(false);
+        clashResultPanel.SetActive(false);
+    }
+    private void Update()
+    {
+        if (isSelectingTarget)
+        {
+            HandleTargetInput();
+        }
     }
 
     // === 턴 시작 시 호출 (CombatManager.SetState(StartTurn)에서 호출됨) ===
     public void ShowSkillSelection(CharacterStats actor)
     {
         currentActor = actor;
+        clashResultPanel.SetActive(false); // 새로운 턴 시작 시 이전 합 결과 숨기기
+        skillPanel.SetActive(true);
 
         // 필수 UI 필드 존재 여부 확인 (NRE 방지)
         if(skillPanel == null || skillButtonPrefab == null || skillButtonParent == null)
         {
             Debug.LogError("UIController의 필수 UI 필드 연결이 누락되었습니다. 상태 전환 실패");
             return;
+        }
+        // 이전 버튼 모두 파괴
+        foreach(Transform child in skillButtonParent)
+        {
+            Destroy(child.gameObject);
         }
         // 턴 정보 업데이트
         if(turnInfoText != null)
@@ -101,7 +119,7 @@ public class UIController : MonoBehaviour
 
         // 상태 전환 요청 (WaitingForInput 으로 진입)
         // 이 코드가 성공적으로 실행되어야 CombatManager가 다음 상태로 넘어갑니다.
-        CombatManager.Instance.SetState(CombatState.WaitingForInput);
+         CombatManager.Instance.SetState(CombatState.WaitingForInput);
     }
 
     // === 타겟 선택 로직 ===
@@ -116,15 +134,6 @@ public class UIController : MonoBehaviour
 
         Debug.Log($"타겟 선택 시작: {skill.Name}");
     }
-
-    private void Update()
-    {
-        if (isSelectingTarget)
-        {
-            HandleTargetInput();
-        }
-    }
-
     private void HandleTargetInput()
     {
         if (Input.GetMouseButtonDown(0))
@@ -141,17 +150,21 @@ public class UIController : MonoBehaviour
                 {
                     targetView = hit.collider.GetComponent<CharacterView>();
                 }
-                if(targetView != null)
+                if(targetView != null && targetView.stats != null)
                 {
-                    CharacterStats target = targetView.stats;
-                    if(target != null)
+                    // 타겟이 유효한지 확인 후 선택 완료
+                    if(targetView.stats.CurrentHP > 0)
                     {
-                        EndTargetSelection(target);
+                        EndTargetSelection(targetView.stats);
+                    }
+                    else
+                    {
+                        Debug.Log("사망한 캐릭터는 타겟으로 선택할 수 없습니다.");
                     }
                 }
                 else
                 {
-                    Debug.LogWarning($"레이캐스트가 {hit.collider.name}에 맞았지만, CharacterStats 컴포넌트를 찾을 수 없습니다.");
+                    Debug.LogWarning($"레이캐스트가 {hit.collider.name}에 맞았지만, 유효한 CharacterView/Stats 컴포넌트를 찾을 수 없습니다.");
                 }
             }
         }
@@ -160,11 +173,48 @@ public class UIController : MonoBehaviour
     private void EndTargetSelection(CharacterStats target)
     {
         isSelectingTarget = false;
-        // 선택된 타겟을 CcombatManager 가 참조할 수 있도록 설정
-        CombatManager.Instance.selectedTarget = target;
-        CombatManager.Instance.selectedSkill = selectedSkill;
 
-        // CombatManager에게 계산을 시작하도록 요청
-        CombatManager.Instance.SetState(CombatState.CalculatingCombat);
+        // CombatManager의 OnSkillSelected를 호출하여 합 준비 (ClashSetup) 단계로 전환합니다.
+        // CombatManager는 이 메서드를 통해 selectedTarget과 selectedSkill을 설정합니다.
+        CombatManager.Instance.OnSkillSelected(selectedSkill, target);
+
+        // UI 클린업
+        if(turnInfoText != null)
+        {
+            turnInfoText.text = $"{currentActor.Name}이(가) {target.Name}에게 {selectedSkill.Name} 사용 준비.";
+        }
+    }
+    // CombatManager에서 호출될 메서드 (CS1061 오류 해결)
+    public void ShowClashResult(string actorName, int actorPower, string targetName, int targetPower, int actorCoins, int targetCoins)
+    {
+        if (clashResultPanel == null || clashResultText == null) return;
+
+        // 패널이 꺼져있다면 활성화
+        if (!clashResultPanel.activeSelf) clashResultPanel.SetActive(true);
+
+        string resultColor = "white";
+        string statusMessage = "합 진행 중...";
+
+        if (actorPower > targetPower)
+        {
+            resultColor = "green";
+            statusMessage = $"{actorName} 합 승리! (코인 파괴)";
+        }
+        else if (targetPower > actorPower)
+        {
+            resultColor = "red";
+            statusMessage = $"{targetName} 합 승리! (코인 파괴)";
+        }
+        else
+        {
+            resultColor = "yellow";
+            statusMessage = "무승부! (코인 유지)";
+        }
+
+        // 텍스트 구성 (위력 및 남은 코인 표시)
+        clashResultText.text = $"<size=120%><color={resultColor}>{statusMessage}</color></size>\n\n" +
+                               $"{actorName}: <color=cyan>{actorPower}</color> (코인: {actorCoins})\n" +
+                               $"vs\n" +
+                               $"{targetName}: <color=orange>{targetPower}</color> (코인: {targetCoins})";
     }
 }
