@@ -13,20 +13,12 @@ public class Skill
 
     // 데미지 필드
     public int BasePower; //기본 공격력에 더할 위력
-    public int CoinCount; // 코인 개수
-    public int CoinBonus; // 코인 성공 시 추가 위력
+    public int CoinPower; // 코인 위력 (앞면 하나당 추가되는 수치)
+    public int MaxCoinCount; // 최대 코인 개수
 
     [Header("쿨타임")]
     public int MaxCooldown; // 스킬 쿨타임
     public int CurrentCooldown; // 현재 남은 쿨타임 (CombatManager에서 관리)
-
-    [Header("합(Clash) 위력")]
-    // 합 계산 시 사용되는 기본 위력 (BasePower와 동일하게 설정 가능)
-    public int ClashBase;
-    // 합 계산 시 코인 성공 시 추가되는 보너스 (CoinBonus와 동일하게 설정 가능)
-    public int ClashCoinBonus;
-    // 합에만 영향을 미치는 추가 보너스 값 (예: 스킬 레벨 보정, 코인 앞면의 추가 위력 등)
-    public int ClashBonus;
 
     [Header("합 진행 상태")]
     public int CurrentCoinCount; // 현재 남은 코인 수 (파괴 시 감소)
@@ -37,46 +29,55 @@ public class Skill
     public List<StatusEffect> EffectsToApply = new List<StatusEffect>();
 
     // 생성자
-    public Skill(string id,string name, TargetScope scope, 
-        int power, int coinCount = 1, int coinBonus = 3, int cd = 0,
-        int clashBase = -1, int clashBonus = 0) // 합 관련 인자 추가
+    public Skill(string id, string name, TargetScope scope, int basePower,
+        int coinPower, int maxCoinCount, int cd = 0)
     {
         Id = id;
         Name = name;
         Scope = scope;
-        
-        // 데미지 필드
-        BasePower = power;  
-        CoinCount = coinCount;  
-        CoinBonus = coinBonus;  
-        
-        // 쿨타임
+        BasePower = basePower;
+        CoinPower = coinPower;
+        MaxCoinCount = maxCoinCount;
+
+        // 초기화 시 현재 코인은 최대 코인과 동일
+        CurrentCoinCount = maxCoinCount;
+
         MaxCooldown = cd;
-        CurrentCooldown = 0; // 시작 시 쿨타임은 0
-
-        // [합 필드 초기화]
-        // ClashBase가 -1이면 BasePower와 동일하게 설정 (유연성 확보)
-        ClashBase = (clashBase == -1) ? power : clashBase;
-        ClashCoinBonus = coinBonus; // 합 코인 보너스는 데미지 코인 보너스와 동일하게 설정
-        ClashBonus = clashBonus;
-
-        // EffectsToApply 리스트 초기화 (null 방지)
+        CurrentCooldown = 0;
         EffectsToApply = new List<StatusEffect>();
     }
-    //public Skill(string name, int basePower, TargetScope scope)
-    //{
-    //    Id = name;
-    //    Name = name;
-    //    BasePower = basePower;
-    //    Scope = scope;
+    /// <summary>
+    /// 합 또는 공격 시작 전 코인 개수를 최대치로 리셋합니다.
+    /// </summary>
+    public void ResetCoinCount()
+    {
+        CurrentCoinCount = MaxCoinCount;
+    }
+    /// <summary>
+    /// 현재 남은 코인 개수만큼 던져서 최종 위력을 계산합니다.
+    /// </summary>
+    /// <returns>최종 위력 값 및 앞면 개수(연출용)</returns>
+    public (int finalPower, int headsCount) GetExecutionResult()
+    {
+        int headsCount = 0;
 
-    //    CoinCount = 1;
-    //    CoinBonus = 3;
-    //    MaxCooldown = 0;
+        // 현재 남은 코인 수만큼만 던짐 (코인 파괴 반영)
+        for(int i = 0; i < CurrentCoinCount; i++)
+        {
+            // 50% 확률로 앞면 (실제 게임처럼 정신력 시스템 추가 시 확률 변동 가능)
+            if(UnityEngine.Random.value < 0.5f)
+            {
+                headsCount++;
+            }
+        }
 
-    //    // [ 합 필드 초기화]
-    //    ClashBase = basePower; // 합 기본 위력은 BasePower 와 동일
-    //    ClashCoinBonus = 3; // 합 코인 보너스 기본값 3
-    //    ClashBonus = 0; // 합 추가 보너스 없음
-    //}
+        // 최종 위력 = 기본 위력 + (앞면 개수 * 코인 위력)
+        // 만약 코인 위력이 마이너스인 스킬(침식 등) 도 처리 가능하도록 설계
+        int finalPower = BasePower + (headsCount * CoinPower);
+
+        // 위력은 최소 0 이하로 내려가지 않게 방어
+        finalPower = Mathf.Max(0, finalPower);
+
+        return (finalPower, headsCount);
+    }
 }

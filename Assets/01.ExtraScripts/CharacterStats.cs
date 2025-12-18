@@ -82,20 +82,15 @@ public class CharacterStats
     }
     private void InitializeBaseSkills()
     {
-        // Skill 상세 생성자 인자 순서
-        // Skill("Id", "Name", Scope, BasePower, CoinCount, CoinBonus, Cooldown, ClashBase, ClashBonus)
-
-        // Skill 생성자에 ClashBase와 ClashBonus 인자 추가
         Skill basicAttack = new Skill(
             id: "basicAttack",
             name: "기본 공격",
             scope: TargetScope.SingleEnemy,
-            power: 5,
-            coinCount: 1,
-            coinBonus: 3,
-            cd: 0,
-            clashBase: 5,
-            clashBonus: 0);
+            basePower: 5,
+            coinPower: 3,
+            maxCoinCount: 1,
+            cd: 0); // 쿨타임
+
         if(!AvailableSkills.Any(s => s.Id == basicAttack.Id))
         {
             AvailableSkills.Add(basicAttack);

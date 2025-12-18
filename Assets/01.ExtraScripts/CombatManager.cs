@@ -24,7 +24,7 @@ public class CombatManager : MonoBehaviour
     private Skill targetClashSkill;
 
     [Header("전투 속도 설정")]
-    public float clashDisplayDuration = 1.0f;
+    public float clashDisplayDuration = 0.8f;
 
     private void Awake()
     {
@@ -52,8 +52,8 @@ public class CombatManager : MonoBehaviour
         CharacterStats player = new CharacterStats("Player", 100, 15, 10, 10);
         CharacterStats enemy = new CharacterStats("Enemy", 80, 15, 8, 8);
 
-        Skill playerAttack = new Skill("basicAttack", "기본 공격", TargetScope.SingleEnemy, 5, 2, 3, 0, 5, 0);
-        Skill enemyAttack = new Skill("basicAttack", "적 기본 공격", TargetScope.SinglePlayer, 5, 2, 3, 0, 5, 0);
+        Skill playerAttack = new Skill("basicAttack", "기본 공격", TargetScope.SingleEnemy, 5, 3, 2, 0);
+        Skill enemyAttack = new Skill("basicAttack", "적 기본 공격", TargetScope.SinglePlayer, 5, 3, 2, 0);
 
         player.AvailableSkills.Add(playerAttack);
         enemy.AvailableSkills.Add(enemyAttack);
@@ -112,124 +112,120 @@ public class CombatManager : MonoBehaviour
                     if (party.Contains(currentActor))
                     {
                         uiController.ShowSkillSelection(currentActor);
-                        currentState = CombatState.WaitingForInput;
-                        yield break;
                     }
                     else
                     {
                         SetState(CombatState.ClashSetup);
                     }
+                    break;
                 }
-                break;
 
             case CombatState.ClashSetup:
                 {
                     if (enemies.Contains(currentActor))
                     {
                         selectedTarget = party.FirstOrDefault(p => p.CurrentHP > 0);
-                        selectedSkill = currentActor.AvailableSkills.FirstOrDefault(s => s.Id == "basicAttack");
+                        selectedSkill = currentActor.AvailableSkills.FirstOrDefault();
                     }
 
                     if (selectedTarget != null)
-                        targetClashSkill = selectedTarget.AvailableSkills.FirstOrDefault(s => s.Id == "basicAttack");
+                        targetClashSkill = selectedTarget.AvailableSkills.FirstOrDefault();
 
-                    if (targetClashSkill == null || selectedSkill == null)
-                    {
-                        SetState(CombatState.CalculatingCombat);
-                        yield break;
-                    }
-
-                    selectedSkill.CurrentCoinCount = selectedSkill.CoinCount;
-                    targetClashSkill.CurrentCoinCount = targetClashSkill.CoinCount;
-                    selectedSkill.WinCoinCount = 0;
-                    targetClashSkill.WinCoinCount = 0;
+                    // 합을 시작하기 전 코인 개수를 최대로 리셋 (Skill.cs에 추가한 메서드 활용)
+                    if(selectedSkill != null) selectedSkill.ResetCoinCount();
+                    if(targetClashSkill != null) targetClashSkill.ResetCoinCount();
 
                     SetState(CombatState.ClashCalculation);
+                    break;
                 }
-                break;
 
             case CombatState.ClashCalculation:
                 {
+                    // 합 루프 실행
                     yield return StartCoroutine(ClashCoinLoopRoutine(currentActor, selectedSkill, selectedTarget, targetClashSkill));
                     SetState(CombatState.CalculatingCombat);
+                    break;
                 }
-                break;
 
             case CombatState.CalculatingCombat:
                 {
-                    if (selectedTarget.CurrentHP <= 0 && selectedSkill.WinCoinCount > 0) { OnAnimationFinished(); yield break; }
-
-                    // 최종 승자 결정 및 데미지 적용
-                    if (selectedSkill.WinCoinCount > 0)
+                    // 최종 승자 확인 및 데임지 단계
+                    if(selectedSkill.CurrentCoinCount > 0)
                     {
-                        int dmg = CalculateLimbusDamage(currentActor, selectedTarget, selectedSkill, selectedSkill.WinCoinCount);
+                        // 아군 (또는 현재 공격자) 승리
+                        int dmg = CalculateFinalDamage(currentActor, selectedSkill);
                         selectedTarget.TakeDamage(dmg);
-                        UpdateCombatVisuals(selectedTarget, currentActor, dmg);
+                        UpdateCombatVisuals(selectedTarget, currentActor,dmg);
+                        SetState(CombatState.PlayingAnimation);
                     }
-                    else if (targetClashSkill.WinCoinCount > 0)
+                    else if(targetClashSkill.CurrentCoinCount > 0)
                     {
-                        int dmg = CalculateLimbusDamage(selectedTarget, currentActor, targetClashSkill, targetClashSkill.WinCoinCount);
+                        // 적군(또는 피격자) 승리 (합에서 이겨서 반격)
+                        int dmg = CalculateFinalDamage(selectedTarget, targetClashSkill);
                         currentActor.TakeDamage(dmg);
-                        UpdateCombatVisuals(currentActor, selectedTarget, dmg);
+                        UpdateCombatVisuals(currentActor,selectedTarget,dmg);
+                        SetState(CombatState.PlayingAnimation);
                     }
-
-                    SetState(CombatState.PlayingAnimation);
+                    else
+                    {
+                        // 무승부 등으로 인해 둘 다 코인이 없으면 다음 턴으로
+                        OnAnimationFinished();
+                    }
+                    break;
                 }
-                break;
 
             case CombatState.PlayingAnimation:
                 {
-                    CharacterView view = FindView(currentActor);
+                    CharacterView view = FindView(currentActor); // 실제로는 승리자 뷰를 찾아야 함
                     if (view != null) view.PlayAttackAnimation();
                     else OnAnimationFinished();
+                    break;
                 }
-                break;
 
             case CombatState.CombatEnd:
-                Debug.Log("전투 종료");
-                break;
+                {
+                    // 모든 적이 죽었는지 확인
+                    bool playerWon = enemies.All(e => e.CurrentHP <= 0);
+
+                    // 애니메이션이 끝날 시간을 고려하여 약간의 딜레이 후 UI 표시
+                    StartCoroutine(ShowResultWithDelay(playerWon));
+                    break;
+                }
         }
     }
-
-    private IEnumerator ClashCoinLoopRoutine(CharacterStats attacker, Skill aSkill, CharacterStats defender, Skill dSkill)
+    private IEnumerator ClashCoinLoopRoutine(CharacterStats aStats, Skill aSkill, CharacterStats dStats, Skill dSkill)
     {
+        // 누군가의 코인이 0이 될 때까지 무한 반복
         while (aSkill.CurrentCoinCount > 0 && dSkill.CurrentCoinCount > 0)
         {
-            int p1 = CalculateClashPower(attacker, aSkill);
-            int p2 = CalculateClashPower(defender, dSkill);
+            // Skill.cs 의 신규 메서드로 위력 계산
+            var aRes = aSkill.GetExecutionResult();
+            var dRes = dSkill.GetExecutionResult();
 
-            if (uiController != null)
-                uiController.ShowClashResult(attacker.Name, p1, defender.Name, p2, aSkill.CurrentCoinCount, dSkill.CurrentCoinCount);
-
+            uiController.ShowClashResult(aStats.Name, aRes.finalPower, dStats.Name, dRes.finalPower, aSkill.CurrentCoinCount, dSkill.CurrentCoinCount);
             yield return new WaitForSeconds(clashDisplayDuration);
 
-            if (p1 > p2) dSkill.CurrentCoinCount--;
-            else if (p2 > p1) aSkill.CurrentCoinCount--;
-            // 무승부(p1 == p2) 시 코인 차감 없음
+            // 위력 비교 후 패배자 코인 파괴
+            if(aRes.finalPower > dRes.finalPower)
+            {
+                dSkill.CurrentCoinCount--;
+                Debug.Log($"{dStats.Name}의 코인 파괴! 남은 코인: {dSkill.CurrentCoinCount}");
+            }
+            else if (dRes.finalPower > aRes.finalPower)
+            {
+                aSkill.CurrentCoinCount--;
+                Debug.Log($"{dStats.Name}의 코인 파괴! 남은 코인: {dSkill.CurrentCoinCount}");
+            }
+            // 무승부 시 아무 일도 일어나지 않고 다시 Loop
         }
-
-        aSkill.WinCoinCount = aSkill.CurrentCoinCount;
-        dSkill.WinCoinCount = dSkill.CurrentCoinCount;
     }
-
-    private int CalculateClashPower(CharacterStats character, Skill skill)
+    private int CalculateFinalDamage(CharacterStats attacker, Skill skill)
     {
-        // GetStatValue 오류 해결을 위해 직접 필드 참조 (또는 stats.GetStatValue 구현 필요)
-        int power = character.Attack + skill.ClashBase;
-        for (int i = 0; i < skill.CurrentCoinCount; i++)
-        {
-            if (UnityEngine.Random.Range(0, 2) == 1) power += skill.ClashCoinBonus;
-        }
-        return power;
+        // 승리 시점의 남은 코인 개수로 최종 데미지 계산
+        var result = skill.GetExecutionResult();
+        int totalDamage = attacker.Attack + result.finalPower;
+        return Mathf.Max(1, totalDamage);
     }
-
-    private int CalculateLimbusDamage(CharacterStats attacker, CharacterStats defender, Skill skill, int finalCoins)
-    {
-        int attackPower = attacker.Attack + skill.BasePower + (skill.CoinBonus * finalCoins);
-        int baseDamage = attackPower - defender.Defense;
-        return Mathf.Max(1, baseDamage);
-    }
-
     private void UpdateCombatVisuals(CharacterStats victim, CharacterStats winner, int damage)
     {
         CharacterView vView = FindView(victim);
@@ -237,49 +233,41 @@ public class CombatManager : MonoBehaviour
         {
             vView.UpdateHealthBar();
             vView.ShowDamageText(damage, Color.red);
-            vView.ShowClashDefeatEffect();
         }
-        CharacterView wView = FindView(winner);
-        if (wView != null) wView.ShowClashVictoryEffect();
     }
-
     public void OnSkillSelected(Skill skill, CharacterStats target)
     {
-        if (currentState != CombatState.WaitingForInput) return;
         selectedSkill = skill;
         selectedTarget = target;
         SetState(CombatState.ClashSetup);
     }
-
     private void PrepareTurnOrder()
     {
         var all = party.Concat(enemies).Where(c => c.CurrentHP > 0).OrderByDescending(c => c.Speed).ToList();
         turnOrderQueue = new Queue<CharacterStats>(all);
     }
-
     public void OnAnimationFinished()
     {
-        EndTurnCleanup();
         SetState(CombatState.StartTurn);
     }
-
-    private void EndTurnCleanup()
+    private void EndRoundCleanup()
     {
-        // 상태 이상 처리 로직 (생략 가능)
+
     }
-
-    private void EndRoundCleanup() { }
-
     private bool CheckCombatEndAndAdvanceTurn()
     {
-        if (party.All(p => p.CurrentHP <= 0) || enemies.All(e => e.CurrentHP <= 0))
+        if(party.All(p => p.CurrentHP <= 0) || enemies.All(e => e.CurrentHP <= 0))
         {
             SetState(CombatState.CombatEnd);
             return true;
         }
         return false;
     }
-
+    private IEnumerator ShowResultWithDelay(bool won)
+    {
+        yield return new WaitForSeconds(1.5f);
+        UIController.Instance.ShowBattleResult(won);
+    }
     private CharacterView FindView(CharacterStats stats)
     {
         return FindObjectsByType<CharacterView>(FindObjectsSortMode.None).FirstOrDefault(v => v.stats == stats);

@@ -2,6 +2,7 @@
 using UnityEngine.UI; // Text (Legacy) 또는 Button 등을 위해 필요
 using TMPro;         // TextMeshProUGUI를 위해 필요
 using System.Collections.Generic;
+using UnityEngine.SceneManagement; // 씬 전환을 위해 추가
 
 public class UIController : MonoBehaviour
 {
@@ -24,10 +25,28 @@ public class UIController : MonoBehaviour
     public GameObject clashResultPanel; // 합 결과를 표시할 패널
     public TextMeshProUGUI clashResultText; // 합 결과 텍스트
 
+    [Header("전투 종료 결과 UI")]
+    public GameObject battleResultPanel; // 승리/패배 전체 패널
+    public TextMeshProUGUI resultTitleText; // "VICTORY" 또는 "DEFEAT" 표시
+
+    // 게임 재시작 및 타이틀 화면 으로 돌아가는 버튼
+    public GameObject optionPanel; // 방금 만든 OptionPanel을 연결
+    public Button restartButton; // 다시 시작 버튼
+    public Button lobbyButton; // 로비로 이동 버튼
+
     // === 내부 상태 ===
     private bool isSelectingTarget = false;
     private CharacterStats currentActor;
     private Skill selectedSkill;
+
+    [Header("코인 연출 요소")]
+    public GameObject coinPrefab; // 코인 이미지 프리팹
+    public Transform playerCoinParent; // 플레이어 코인이 배치될 부모(Layout Group)
+    public Transform enemyCoinParent; // 적 코인이 배치될 부모
+
+    // 코인들을 관리할 리스트
+    private List<GameObject> playerCoins = new List<GameObject>();
+    private List<GameObject> enemyCoins = new List<GameObject>();
 
     // === 초기화 ===
     private void Awake()
@@ -45,16 +64,16 @@ public class UIController : MonoBehaviour
 
     void Start()
     {
-        // NullReferenceException 방지를 위해 안전 체크
-        if (skillPanel == null || clashResultPanel == null)
-        {
-            Debug.LogError("UIController: Skill Panel이 Inspector에 연결되지 않았습니다.");
-            return;
-        }
+        // 초기 UI 상태 설정
+        if(skillPanel != null) skillPanel.SetActive(false);
+        if(clashResultPanel != null) clashResultPanel.SetActive(false);
+        if (battleResultPanel != null) battleResultPanel.SetActive(false);
 
-        // 초기에는 UI를 숨깁니다.
-        skillPanel.SetActive(false);
-        clashResultPanel.SetActive(false);
+        // 버튼 리스너 등록
+        if (restartButton != null) restartButton.onClick.AddListener(OnRestartClicked);
+        if (lobbyButton != null) lobbyButton.onClick.AddListener(OnLobbyclicked);
+
+        if(optionPanel != null) optionPanel.SetActive(false); // 시작 시 숨김
     }
     private void Update()
     {
@@ -136,85 +155,106 @@ public class UIController : MonoBehaviour
     }
     private void HandleTargetInput()
     {
-        if (Input.GetMouseButtonDown(0))
+        if(Input.GetMouseButtonDown(0))
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            RaycastHit hit;
-
-            if (Physics.Raycast(ray, out hit, 100f, targetLayer))
+            if(Physics.Raycast(ray, out RaycastHit hit, 100f, targetLayer))
             {
-                // 타겟 오브젝트에서 CharacterStats 컴포넌트를 찾음
                 CharacterView targetView = hit.collider.GetComponentInParent<CharacterView>();
-
-                if (targetView != null)
+                if(targetView != null && targetView.stats.CurrentHP > 0)
                 {
-                    targetView = hit.collider.GetComponent<CharacterView>();
-                }
-                if(targetView != null && targetView.stats != null)
-                {
-                    // 타겟이 유효한지 확인 후 선택 완료
-                    if(targetView.stats.CurrentHP > 0)
-                    {
-                        EndTargetSelection(targetView.stats);
-                    }
-                    else
-                    {
-                        Debug.Log("사망한 캐릭터는 타겟으로 선택할 수 없습니다.");
-                    }
-                }
-                else
-                {
-                    Debug.LogWarning($"레이캐스트가 {hit.collider.name}에 맞았지만, 유효한 CharacterView/Stats 컴포넌트를 찾을 수 없습니다.");
+                    isSelectingTarget = false;
+                    CombatManager.Instance.OnSkillSelected(selectedSkill, targetView.stats);
                 }
             }
-        }
-    }
-
-    private void EndTargetSelection(CharacterStats target)
-    {
-        isSelectingTarget = false;
-
-        // CombatManager의 OnSkillSelected를 호출하여 합 준비 (ClashSetup) 단계로 전환합니다.
-        // CombatManager는 이 메서드를 통해 selectedTarget과 selectedSkill을 설정합니다.
-        CombatManager.Instance.OnSkillSelected(selectedSkill, target);
-
-        // UI 클린업
-        if(turnInfoText != null)
-        {
-            turnInfoText.text = $"{currentActor.Name}이(가) {target.Name}에게 {selectedSkill.Name} 사용 준비.";
         }
     }
     // CombatManager에서 호출될 메서드 (CS1061 오류 해결)
     public void ShowClashResult(string actorName, int actorPower, string targetName, int targetPower, int actorCoins, int targetCoins)
     {
-        if (clashResultPanel == null || clashResultText == null) return;
+        if(clashResultPanel == null || clashResultText == null) return;
 
-        // 패널이 꺼져있다면 활성화
-        if (!clashResultPanel.activeSelf) clashResultPanel.SetActive(true);
+        clashResultPanel.SetActive(true);
 
-        string resultColor = "white";
-        string statusMessage = "합 진행 중...";
+        // 코인 정보까지 포함하여 표시
+        clashResultText.text = $"{actorName}({actorPower})\nVS\n{targetName}({targetPower})\n" +
+                               $"\nCoins: {actorCoins} : {targetCoins}";
+    }
+    // 전투 종료 UI 메서드
 
-        if (actorPower > targetPower)
+    /// <summary>
+    /// 전투가 끝났을 때 승리 또는 패배 창을 띄웁니다.
+    /// </summary>
+    public void ShowBattleResult(bool isVictory)
+    {
+        if(battleResultPanel == null) return;
+
+        battleResultPanel.SetActive(true);
+
+        if(resultTitleText != null)
         {
-            resultColor = "green";
-            statusMessage = $"{actorName} 합 승리! (코인 파괴)";
-        }
-        else if (targetPower > actorPower)
-        {
-            resultColor = "red";
-            statusMessage = $"{targetName} 합 승리! (코인 파괴)";
-        }
-        else
-        {
-            resultColor = "yellow";
-            statusMessage = "무승부! (코인 유지)";
-        }
+            // resultTitleText.text = isVictory ? "VICTORY" : "DEFEAT";
+            // resultTitleText.color = isVictory ? Color.yellow : Color.red;
 
-        // 텍스트 구성 (위력 및 남은 코인 표시)
-        clashResultText.text = $"<size=120%><color={resultColor}>{statusMessage}</color></size>\n\n" +
-                               $"{actorName}: <color=cyan>{actorPower}</color> (코인: {actorCoins})\n" +
-                               $"vs\n" +
-                               $"{targetName}: <color=orange>{targetPower}</color> (코인: {targetCoins})";
+            battleResultPanel.transform.Find("VICTORY").gameObject.SetActive(isVictory);
+            battleResultPanel.transform.Find("DEFEAT").gameObject.SetActive(!isVictory);
+        }
+    }
+    public void UpdateClashCoins(int pCurrent, int pHeads, int eCurrent, int eHeads)
+    {
+        // 플레이어 코인 상태 업데이트
+        for(int i = 0; i < playerCoins.Count; i++)
+        {
+            if(i >= pCurrent)
+            {
+                playerCoins[i].SetActive(false); // 파괴된 코인 숨기기
+            }
+            else
+            {
+                // i가 pHeads 보다 작으면 색상, 아니면 뒷면 색상
+                Image img = playerCoins[i].GetComponent<Image>();
+                img.color = (i < pHeads) ? Color.yellow : Color.gray;
+            }
+        }
+        for(int i = 0; i < enemyCoins.Count; i++)
+        {
+            if (i >= eCurrent)
+            {
+                enemyCoins[i].SetActive(false); // 파괴된 코인 숨기기
+            }
+            else
+            {
+                // i가 eHeads 보다 작으면 색상, 아니면 뒷면 색상
+                Image img = enemyCoins[i].GetComponent<Image>();
+                img.color = (i < eHeads) ? Color.yellow : Color.gray;
+            }
+        }
+    }
+    private void OnRestartClicked()
+    {
+        // 현재 활성화된 씬을 다시 로드 (전투 초기화)
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+
+        // 게임 재시작 시 시간 흐름을 1초로 초기화
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+    }
+    private void OnLobbyclicked()
+    {
+        // 메인 로비 씬을 이동 (씬 이름이 "Lobby" 라고 가정)
+        // SceneManager.LoadScene("Lobby");
+        Debug.Log("로비로 이동합니다.");
+    }
+    // 메뉴 버튼을 눌렀을 때 실행될 메서드
+    public void ToggleOptionMenu()
+    {
+        if(optionPanel == null) return;
+
+        // 현재 상태의 반대로 바꿈 (켜져 있으면 끄고 꺼져 있으면 켬)
+        bool isAcitve = optionPanel.activeSelf;
+        optionPanel.SetActive(!isAcitve);
+
+        //메뉴가 열릴 때 게임을 일시정지
+        Time.timeScale = isAcitve ? 1f : 0f;
     }
 }
